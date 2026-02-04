@@ -14,6 +14,7 @@ const envSchema = z.object({
   // Circle
   CIRCLE_API_KEY: z.string().min(1),
   CIRCLE_ENTITY_SECRET: z.string().min(1),
+  CIRCLE_WALLET_SET_ID: z.string().min(1),
 
   // Stork
   STORK_API_KEY: z.string().min(1),
@@ -21,11 +22,13 @@ const envSchema = z.object({
 
   // Agent Alice
   ALICE_PRIVATE_KEY: z.string().startsWith("0x"),
+  ALICE_EVM_ADDRESS: z.string().startsWith("0x"),
   ALICE_TOKEN_ADDRESS: z.string().startsWith("0x"),
   ALICE_BONDING_CURVE_ADDRESS: z.string().startsWith("0x"),
 
   // Agent Bob
   BOB_PRIVATE_KEY: z.string().startsWith("0x"),
+  BOB_EVM_ADDRESS: z.string().startsWith("0x"),
   BOB_TOKEN_ADDRESS: z.string().startsWith("0x"),
   BOB_BONDING_CURVE_ADDRESS: z.string().startsWith("0x"),
 

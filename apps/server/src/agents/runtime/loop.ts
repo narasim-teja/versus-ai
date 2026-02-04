@@ -1,0 +1,299 @@
+/**
+ * Agent Loop
+ *
+ * Main runtime loop that orchestrates agent cycles:
+ * 1. Read state
+ * 2. Make decisions
+ * 3. Log decisions
+ * 4. (Phase 3: Execute actions)
+ *
+ * Runs both Alice and Bob in the same process.
+ */
+
+import { logger } from "../../utils/logger";
+import type { AgentConfig, AgentRuntimeStatus, DecisionResult } from "../types";
+import { readAgentState, resetCycleCounter } from "./state";
+import { decide } from "./decide";
+import { logDecision, getLatestDecision } from "./logger";
+
+// Default cycle interval: 30 seconds
+const DEFAULT_CYCLE_INTERVAL_MS = 30_000;
+
+// Agent runtime instances
+const agentRuntimes = new Map<string, AgentRuntime>();
+
+/**
+ * Agent Runtime Class
+ *
+ * Manages the lifecycle of a single agent's decision loop.
+ */
+class AgentRuntime {
+  private config: AgentConfig;
+  private isRunning: boolean = false;
+  private currentCycle: number = 0;
+  private lastDecisionTime: Date | null = null;
+  private lastError: string | null = null;
+  private intervalId: ReturnType<typeof setInterval> | null = null;
+  private cycleIntervalMs: number;
+
+  constructor(config: AgentConfig, cycleIntervalMs?: number) {
+    this.config = config;
+    this.cycleIntervalMs = cycleIntervalMs || DEFAULT_CYCLE_INTERVAL_MS;
+  }
+
+  /**
+   * Start the agent loop
+   */
+  start(): void {
+    if (this.isRunning) {
+      logger.warn({ agentId: this.config.id }, "Agent already running");
+      return;
+    }
+
+    this.isRunning = true;
+    logger.info(
+      {
+        agentId: this.config.id,
+        cycleIntervalMs: this.cycleIntervalMs,
+      },
+      "Starting agent loop"
+    );
+
+    // Run first cycle immediately
+    this.runCycle().catch((error) => {
+      logger.error({ agentId: this.config.id, error }, "First cycle failed");
+    });
+
+    // Schedule subsequent cycles
+    this.intervalId = setInterval(() => {
+      this.runCycle().catch((error) => {
+        logger.error({ agentId: this.config.id, error }, "Cycle failed");
+      });
+    }, this.cycleIntervalMs);
+  }
+
+  /**
+   * Stop the agent loop
+   */
+  stop(): void {
+    if (!this.isRunning) {
+      logger.warn({ agentId: this.config.id }, "Agent not running");
+      return;
+    }
+
+    if (this.intervalId) {
+      clearInterval(this.intervalId);
+      this.intervalId = null;
+    }
+
+    this.isRunning = false;
+    logger.info({ agentId: this.config.id }, "Agent loop stopped");
+  }
+
+  /**
+   * Run a single decision cycle
+   */
+  async runCycle(): Promise<DecisionResult | null> {
+    const cycleStart = Date.now();
+    this.currentCycle++;
+
+    logger.info(
+      { agentId: this.config.id, cycle: this.currentCycle },
+      "Starting decision cycle"
+    );
+
+    try {
+      // Step 1: Read state
+      const state = await readAgentState(this.config);
+
+      // Step 2: Make decisions
+      const decision = decide(state, this.config);
+
+      // Step 3: Log decision
+      await logDecision(this.config, state, decision.thinking, decision.actions);
+
+      // Update status
+      this.lastDecisionTime = new Date();
+      this.lastError = null;
+
+      const cycleDuration = Date.now() - cycleStart;
+      logger.info(
+        {
+          agentId: this.config.id,
+          cycle: this.currentCycle,
+          actionsCount: decision.actions.length,
+          urgent: decision.urgent,
+          durationMs: cycleDuration,
+        },
+        "Decision cycle complete"
+      );
+
+      // Phase 3 will add: Step 4: Execute actions
+      // For now, we just log what would be executed
+      if (decision.actions.length > 0) {
+        logger.info(
+          {
+            agentId: this.config.id,
+            actions: decision.actions.map((a) => ({
+              type: a.type,
+              reason: a.reason,
+              priority: a.priority,
+            })),
+          },
+          "Actions to execute (Phase 3)"
+        );
+      }
+
+      return decision;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.lastError = errorMessage;
+
+      logger.error(
+        {
+          agentId: this.config.id,
+          cycle: this.currentCycle,
+          error: errorMessage,
+        },
+        "Decision cycle error"
+      );
+
+      return null;
+    }
+  }
+
+  /**
+   * Force run a cycle (for testing or manual triggers)
+   */
+  async forceCycle(): Promise<DecisionResult | null> {
+    return this.runCycle();
+  }
+
+  /**
+   * Get current runtime status
+   */
+  getStatus(): AgentRuntimeStatus {
+    return {
+      agentId: this.config.id,
+      isRunning: this.isRunning,
+      currentCycle: this.currentCycle,
+      lastDecisionTime: this.lastDecisionTime,
+      lastError: this.lastError,
+      pendingActions: 0, // Will be populated when execution is added
+    };
+  }
+
+  /**
+   * Get agent config
+   */
+  getConfig(): AgentConfig {
+    return this.config;
+  }
+}
+
+/**
+ * Start an agent runtime
+ */
+export function startAgent(
+  config: AgentConfig,
+  cycleIntervalMs?: number
+): AgentRuntime {
+  // Check if already running
+  const existing = agentRuntimes.get(config.id);
+  if (existing) {
+    logger.warn({ agentId: config.id }, "Agent runtime already exists");
+    return existing;
+  }
+
+  // Create and start new runtime
+  const runtime = new AgentRuntime(config, cycleIntervalMs);
+  agentRuntimes.set(config.id, runtime);
+  runtime.start();
+
+  return runtime;
+}
+
+/**
+ * Stop an agent runtime
+ */
+export function stopAgent(agentId: string): boolean {
+  const runtime = agentRuntimes.get(agentId);
+  if (!runtime) {
+    logger.warn({ agentId }, "Agent runtime not found");
+    return false;
+  }
+
+  runtime.stop();
+  agentRuntimes.delete(agentId);
+  return true;
+}
+
+/**
+ * Get agent runtime status
+ */
+export function getAgentStatus(agentId: string): AgentRuntimeStatus | null {
+  const runtime = agentRuntimes.get(agentId);
+  return runtime ? runtime.getStatus() : null;
+}
+
+/**
+ * Get all agent statuses
+ */
+export function getAllAgentStatuses(): AgentRuntimeStatus[] {
+  return Array.from(agentRuntimes.values()).map((r) => r.getStatus());
+}
+
+/**
+ * Force run a cycle for an agent
+ */
+export async function forceAgentCycle(
+  agentId: string
+): Promise<DecisionResult | null> {
+  const runtime = agentRuntimes.get(agentId);
+  if (!runtime) {
+    logger.warn({ agentId }, "Agent runtime not found for force cycle");
+    return null;
+  }
+
+  return runtime.forceCycle();
+}
+
+/**
+ * Start all agents
+ */
+export function startAllAgents(
+  configs: AgentConfig[],
+  cycleIntervalMs?: number
+): void {
+  logger.info({ count: configs.length }, "Starting all agents");
+
+  for (const config of configs) {
+    startAgent(config, cycleIntervalMs);
+  }
+}
+
+/**
+ * Stop all agents
+ */
+export function stopAllAgents(): void {
+  logger.info({ count: agentRuntimes.size }, "Stopping all agents");
+
+  for (const [agentId] of agentRuntimes) {
+    stopAgent(agentId);
+  }
+}
+
+/**
+ * Check if an agent is running
+ */
+export function isAgentRunning(agentId: string): boolean {
+  const runtime = agentRuntimes.get(agentId);
+  return runtime ? runtime.getStatus().isRunning : false;
+}
+
+/**
+ * Get agent runtime instance
+ */
+export function getAgentRuntime(agentId: string): AgentRuntime | undefined {
+  return agentRuntimes.get(agentId);
+}
