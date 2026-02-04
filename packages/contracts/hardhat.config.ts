@@ -29,7 +29,7 @@ const config: HardhatUserConfig = {
     arc: {
       url: ARC_TESTNET_RPC_URL,
       accounts: [PRIVATE_KEY],
-      chainId: 94524, // Arc testnet chain ID (verify this)
+      chainId: 5042002,
     },
   },
   etherscan: {

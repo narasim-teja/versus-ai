@@ -1,6 +1,14 @@
 {
   "name": "contracts",
   "version": "1.0.0",
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "generate-wallet": "npx tsx scripts/generate-wallet.ts",
+    "deploy:local": "hardhat ignition deploy ./ignition/modules/VersusCore.ts --network hardhat",
+    "deploy:baseSepolia": "hardhat ignition deploy ./ignition/modules/VersusCore.ts --network baseSepolia --parameters ./ignition/parameters/baseSepolia.json",
+    "deploy:arc": "hardhat ignition deploy ./ignition/modules/VersusCore.ts --network arc --parameters ./ignition/parameters/arc.json"
+  },
   "devDependencies": {
     "@nomicfoundation/hardhat-ignition": "^0.15.0",
     "@nomicfoundation/hardhat-ignition-viem": "^0.15.0",
