@@ -203,20 +203,20 @@ async function storeMarketSentiment(data: MarketSentimentData): Promise<void> {
   const now = Date.now();
 
   try {
-    await db.insert(marketSentiment).values([
-      {
-        asset: "ETH",
-        price: data.ethPrice.price.toString(),
-        priceChange24h: data.ethChange24h,
-        timestamp: now,
-      },
-      {
-        asset: "BTC",
-        price: data.btcPrice.price.toString(),
-        priceChange24h: data.btcChange24h,
-        timestamp: now,
-      },
-    ]);
+    // Insert ETH price
+    await db.insert(marketSentiment).values({
+      asset: "ETH",
+      price: data.ethPrice.price.toString(),
+      priceChange24h: data.ethChange24h,
+      timestamp: now,
+    });
+    // Insert BTC price
+    await db.insert(marketSentiment).values({
+      asset: "BTC",
+      price: data.btcPrice.price.toString(),
+      priceChange24h: data.btcChange24h,
+      timestamp: now,
+    });
   } catch (error) {
     // Log but don't fail if DB write fails
     logger.debug({ error }, "Failed to store market sentiment");

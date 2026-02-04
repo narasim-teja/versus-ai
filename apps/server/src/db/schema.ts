@@ -31,9 +31,7 @@ export const circleWallets = sqliteTable("circle_wallets", {
   address: text("address").notNull(),
   blockchain: text("blockchain").notNull().default("EVM-TESTNET"),
   walletSetId: text("wallet_set_id").notNull(),
-  createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(
-    () => new Date()
-  ),
+  createdAt: integer("created_at").$defaultFn(() => Date.now()),
 });
 
 /**
@@ -45,13 +43,11 @@ export const decisionLogs = sqliteTable("decision_logs", {
     .notNull()
     .references(() => agents.id),
   cycle: integer("cycle").notNull(),
-  timestamp: integer("timestamp", { mode: "timestamp" }).notNull(),
-  stateSnapshot: text("state_snapshot", { mode: "json" }).notNull(),
-  thinking: text("thinking", { mode: "json" }).notNull(), // ThinkingStep[]
-  actions: text("actions", { mode: "json" }).notNull(), // Action[]
-  createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(
-    () => new Date()
-  ),
+  timestamp: integer("timestamp").notNull(), // Unix ms
+  stateSnapshot: text("state_snapshot").notNull(), // JSON string
+  thinking: text("thinking").notNull(), // JSON string
+  actions: text("actions").notNull(), // JSON string
+  createdAt: integer("created_at").$defaultFn(() => Date.now()),
 });
 
 /**
@@ -91,7 +87,7 @@ export const marketSentiment = sqliteTable("market_sentiment", {
   asset: text("asset").notNull(), // 'ETHUSD', 'BTCUSD'
   price: text("price").notNull(), // BigInt as string (18 decimals)
   priceChange24h: real("price_change_24h"),
-  timestamp: integer("timestamp", { mode: "timestamp" }).notNull(),
+  timestamp: integer("timestamp").notNull(), // Unix ms
 });
 
 // Relations

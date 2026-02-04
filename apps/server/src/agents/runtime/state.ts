@@ -45,7 +45,7 @@ function getCycle(agentId: string): number {
 }
 
 /**
- * Read own token data from bonding curve
+ * Read own token data from bonding curve and token
  */
 async function readOwnTokenData(config: AgentConfig): Promise<{
   price: bigint;
@@ -53,10 +53,11 @@ async function readOwnTokenData(config: AgentConfig): Promise<{
   revenue: bigint;
 }> {
   const bondingCurve = getBondingCurve(config.bondingCurveAddress);
+  const token = getERC20(config.tokenAddress);
 
   const [price, supply, revenue] = await Promise.all([
     bondingCurve.read.getPrice(),
-    bondingCurve.read.totalSupply(),
+    token.read.totalSupply(),
     bondingCurve.read.earned([config.evmAddress]),
   ]);
 
@@ -145,6 +146,19 @@ async function readHoldings(config: AgentConfig): Promise<Holding[]> {
     return [];
   }
 
+  // Get all creators to find bonding curves for tokens
+  const creatorFactory = getCreatorFactory();
+  const creatorWallets = (await creatorFactory.read.getAllCreators()) as readonly Address[];
+
+  // Build a map of token -> bondingCurve
+  const tokenToBondingCurve = new Map<string, Address>();
+  for (const wallet of creatorWallets) {
+    const creatorInfo = await creatorFactory.read.getCreator([wallet]);
+    const tokenAddr = (creatorInfo as [Address, Address, Address, bigint])[0];
+    const bondingCurveAddr = (creatorInfo as [Address, Address, Address, bigint])[1];
+    tokenToBondingCurve.set(tokenAddr.toLowerCase(), bondingCurveAddr);
+  }
+
   // Enrich with current prices
   const enrichedHoldings: Holding[] = [];
 
@@ -169,17 +183,11 @@ async function readHoldings(config: AgentConfig): Promise<Holding[]> {
       }
 
       // Get current price from bonding curve
-      // Need to find the bonding curve for this token
-      const creatorFactory = getCreatorFactory();
-      const creators = await creatorFactory.read.getAllCreators();
-
       let currentPrice = BigInt(0);
-      for (const creator of creators as Array<[Address, Address, Address]>) {
-        if (creator[1].toLowerCase() === tokenAddress.toLowerCase()) {
-          const bondingCurve = getBondingCurve(creator[2]);
-          currentPrice = (await bondingCurve.read.getPrice()) as bigint;
-          break;
-        }
+      const bondingCurveAddr = tokenToBondingCurve.get(tokenAddress.toLowerCase());
+      if (bondingCurveAddr) {
+        const bondingCurve = getBondingCurve(bondingCurveAddr);
+        currentPrice = (await bondingCurve.read.getPrice()) as bigint;
       }
 
       const balance = BigInt(h.balance);
@@ -222,30 +230,33 @@ async function readOtherCreators(
   excludeAddress: Address
 ): Promise<OtherCreator[]> {
   const creatorFactory = getCreatorFactory();
-  const creators = (await creatorFactory.read.getAllCreators()) as Array<
-    [Address, Address, Address]
-  >;
+  const creatorWallets = (await creatorFactory.read.getAllCreators()) as readonly Address[];
 
   const otherCreators: OtherCreator[] = [];
 
-  for (const [creatorAddress, tokenAddress, bondingCurveAddress] of creators) {
+  for (const creatorWallet of creatorWallets) {
     // Skip self
-    if (creatorAddress.toLowerCase() === excludeAddress.toLowerCase()) {
+    if (creatorWallet.toLowerCase() === excludeAddress.toLowerCase()) {
       continue;
     }
 
     try {
+      // Get creator info: [token, bondingCurve, wallet, createdAt]
+      const creatorInfo = await creatorFactory.read.getCreator([creatorWallet]);
+      const tokenAddress = (creatorInfo as [Address, Address, Address, bigint])[0];
+      const bondingCurveAddress = (creatorInfo as [Address, Address, Address, bigint])[1];
+
       const bondingCurve = getBondingCurve(bondingCurveAddress);
       const token = getERC20(tokenAddress);
 
       const [price, totalSupply, pendingRevenue] = await Promise.all([
         bondingCurve.read.getPrice(),
         token.read.totalSupply(),
-        bondingCurve.read.earned([creatorAddress]),
+        bondingCurve.read.earned([creatorWallet]),
       ]);
 
       otherCreators.push({
-        creatorAddress,
+        creatorAddress: creatorWallet,
         tokenAddress,
         bondingCurveAddress,
         currentPrice: price as bigint,
@@ -254,7 +265,7 @@ async function readOtherCreators(
       });
     } catch (error) {
       logger.warn(
-        { creatorAddress, error },
+        { creatorAddress: creatorWallet, error },
         "Failed to read other creator data"
       );
     }

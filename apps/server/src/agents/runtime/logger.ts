@@ -28,22 +28,18 @@ const listeners = new Map<string, Set<DecisionListener>>();
 /**
  * Serialize bigint values in state for JSON storage
  */
-function serializeState(state: AgentState): object {
-  return JSON.parse(
-    JSON.stringify(state, (_, value) =>
-      typeof value === "bigint" ? value.toString() : value
-    )
+function serializeState(state: AgentState): string {
+  return JSON.stringify(state, (_, value) =>
+    typeof value === "bigint" ? value.toString() : value
   );
 }
 
 /**
  * Serialize actions for JSON storage
  */
-function serializeActions(actions: Action[]): object[] {
-  return JSON.parse(
-    JSON.stringify(actions, (_, value) =>
-      typeof value === "bigint" ? value.toString() : value
-    )
+function serializeActions(actions: Action[]): string {
+  return JSON.stringify(actions, (_, value) =>
+    typeof value === "bigint" ? value.toString() : value
   );
 }
 
@@ -65,9 +61,9 @@ export async function logDecision(
       agentId: config.id,
       cycle: state.cycle,
       timestamp: state.timestamp,
-      stateSnapshot: JSON.stringify(serializeState(state)),
+      stateSnapshot: serializeState(state),
       thinking: JSON.stringify(thinking),
-      actions: JSON.stringify(serializeActions(actions)),
+      actions: serializeActions(actions),
       createdAt: now,
     })
     .returning();
