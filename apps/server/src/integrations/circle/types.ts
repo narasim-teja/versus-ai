@@ -62,3 +62,45 @@ export interface AgentWalletInfo extends WalletInfo {
   agentId: string;
   createdAt: Date;
 }
+
+// Transaction Types
+
+export type TransactionState =
+  | "INITIATED"
+  | "QUEUED"
+  | "SENT"
+  | "CONFIRMED"
+  | "COMPLETE"
+  | "FAILED"
+  | "CANCELLED"
+  | "DENIED";
+
+export type FeeLevel = "LOW" | "MEDIUM" | "HIGH";
+
+export interface ContractExecutionParams {
+  walletId: string;
+  contractAddress: string;
+  abiFunctionSignature: string;
+  abiParameters: (string | number | boolean)[];
+  amount?: string;
+  feeLevel?: FeeLevel;
+  refId?: string;
+}
+
+export interface TransactionResult {
+  id: string;
+  state: TransactionState;
+  txHash?: string;
+  errorReason?: string;
+  createDate?: string;
+  updateDate?: string;
+}
+
+export interface TransactionDetails extends TransactionResult {
+  walletId: string;
+  blockchain: string;
+  contractAddress?: string;
+  sourceAddress?: string;
+  destinationAddress?: string;
+  operation?: "CONTRACT_EXECUTION" | "TRANSFER";
+}

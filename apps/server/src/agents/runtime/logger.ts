@@ -5,7 +5,7 @@
  * buffer of recent decisions for real-time streaming.
  */
 
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 import { db } from "../../db/client";
 import { decisionLogs } from "../../db/schema";
 import { logger } from "../../utils/logger";
@@ -16,6 +16,7 @@ import type {
   DecisionLog,
   ThinkingStep,
 } from "../types";
+import type { ExecutionResult } from "./execute";
 
 // In-memory buffer for recent decisions (for WebSocket streaming)
 const RECENT_DECISIONS_BUFFER_SIZE = 50;
@@ -262,4 +263,64 @@ export function clearRecentBuffer(agentId?: string): void {
   } else {
     recentDecisions.clear();
   }
+}
+
+/**
+ * Serialize execution results for JSON storage
+ */
+function serializeExecutionResults(results: ExecutionResult[]): string {
+  return JSON.stringify(
+    results.map((r) => ({
+      actionType: r.action.type,
+      actionReason: r.action.reason,
+      success: r.success,
+      transactionId: r.transactionId,
+      txHash: r.txHash,
+      error: r.error,
+      approvalTxHash: r.approvalTxHash,
+    }))
+  );
+}
+
+/**
+ * Update a decision log with execution results
+ */
+export async function logExecutionResults(
+  logId: number,
+  results: ExecutionResult[]
+): Promise<void> {
+  const serialized = serializeExecutionResults(results);
+
+  await db
+    .update(decisionLogs)
+    .set({ executionResults: serialized })
+    .where(eq(decisionLogs.id, logId));
+
+  // Update in-memory buffer
+  for (const [agentId, buffer] of recentDecisions) {
+    const logIndex = buffer.findIndex((log) => log.id === logId);
+    if (logIndex !== -1) {
+      // Add execution results to the log object
+      (buffer[logIndex] as any).executionResults = results.map((r) => ({
+        actionType: r.action.type,
+        success: r.success,
+        txHash: r.txHash,
+        error: r.error,
+      }));
+      break;
+    }
+  }
+
+  const successCount = results.filter((r) => r.success).length;
+  const failCount = results.length - successCount;
+
+  logger.info(
+    {
+      logId,
+      totalActions: results.length,
+      successCount,
+      failCount,
+    },
+    "Execution results logged"
+  );
 }

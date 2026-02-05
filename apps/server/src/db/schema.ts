@@ -29,7 +29,7 @@ export const circleWallets = sqliteTable("circle_wallets", {
   id: text("id").primaryKey(), // Circle wallet ID
   agentId: text("agent_id").references(() => agents.id),
   address: text("address").notNull(),
-  blockchain: text("blockchain").notNull().default("EVM-TESTNET"),
+  blockchain: text("blockchain").notNull().default("ARC-TESTNET"),
   walletSetId: text("wallet_set_id").notNull(),
   createdAt: integer("created_at").$defaultFn(() => Date.now()),
 });
@@ -47,6 +47,7 @@ export const decisionLogs = sqliteTable("decision_logs", {
   stateSnapshot: text("state_snapshot").notNull(), // JSON string
   thinking: text("thinking").notNull(), // JSON string
   actions: text("actions").notNull(), // JSON string
+  executionResults: text("execution_results"), // JSON string (nullable - only set after execution)
   createdAt: integer("created_at").$defaultFn(() => Date.now()),
 });
 

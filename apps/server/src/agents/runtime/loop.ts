@@ -14,7 +14,8 @@ import { logger } from "../../utils/logger";
 import type { AgentConfig, AgentRuntimeStatus, DecisionResult } from "../types";
 import { readAgentState, resetCycleCounter } from "./state";
 import { decide } from "./decide";
-import { logDecision, getLatestDecision } from "./logger";
+import { logDecision, logExecutionResults } from "./logger";
+import { executeActions } from "./execute";
 
 // Default cycle interval: 30 seconds
 const DEFAULT_CYCLE_INTERVAL_MS = 30_000;
@@ -35,6 +36,7 @@ class AgentRuntime {
   private lastError: string | null = null;
   private intervalId: ReturnType<typeof setInterval> | null = null;
   private cycleIntervalMs: number;
+  private pendingActions: number = 0;
 
   constructor(config: AgentConfig, cycleIntervalMs?: number) {
     this.config = config;
@@ -110,7 +112,54 @@ class AgentRuntime {
       const decision = decide(state, this.config);
 
       // Step 3: Log decision
-      await logDecision(this.config, state, decision.thinking, decision.actions);
+      const decisionLog = await logDecision(
+        this.config,
+        state,
+        decision.thinking,
+        decision.actions
+      );
+
+      // Step 4: Execute actions (if any)
+      if (decision.actions.length > 0) {
+        logger.info(
+          {
+            agentId: this.config.id,
+            actionsCount: decision.actions.length,
+            actions: decision.actions.map((a) => ({
+              type: a.type,
+              reason: a.reason,
+              priority: a.priority,
+            })),
+          },
+          "Executing actions"
+        );
+
+        const executionResults = await executeActions(
+          decision.actions,
+          this.config
+        );
+
+        // Step 5: Log execution results
+        await logExecutionResults(decisionLog.id, executionResults);
+
+        // Update pending actions count
+        this.pendingActions = executionResults.filter(
+          (r) => !r.success && !r.error
+        ).length;
+
+        const successCount = executionResults.filter((r) => r.success).length;
+        const failCount = executionResults.length - successCount;
+
+        logger.info(
+          {
+            agentId: this.config.id,
+            totalActions: executionResults.length,
+            successCount,
+            failCount,
+          },
+          "Actions execution complete"
+        );
+      }
 
       // Update status
       this.lastDecisionTime = new Date();
@@ -127,22 +176,6 @@ class AgentRuntime {
         },
         "Decision cycle complete"
       );
-
-      // Phase 3 will add: Step 4: Execute actions
-      // For now, we just log what would be executed
-      if (decision.actions.length > 0) {
-        logger.info(
-          {
-            agentId: this.config.id,
-            actions: decision.actions.map((a) => ({
-              type: a.type,
-              reason: a.reason,
-              priority: a.priority,
-            })),
-          },
-          "Actions to execute (Phase 3)"
-        );
-      }
 
       return decision;
     } catch (error) {
@@ -179,7 +212,7 @@ class AgentRuntime {
       currentCycle: this.currentCycle,
       lastDecisionTime: this.lastDecisionTime,
       lastError: this.lastError,
-      pendingActions: 0, // Will be populated when execution is added
+      pendingActions: this.pendingActions,
     };
   }
 

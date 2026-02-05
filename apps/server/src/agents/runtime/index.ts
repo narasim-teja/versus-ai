@@ -8,6 +8,7 @@ export { readAgentState, resetCycleCounter } from "./state";
 export { decide } from "./decide";
 export {
   logDecision,
+  logExecutionResults,
   subscribeToDecisions,
   getRecentDecisions,
   getDecisionHistory,
@@ -26,3 +27,4 @@ export {
   isAgentRunning,
   getAgentRuntime,
 } from "./loop";
+export { executeActions, type ExecutionResult } from "./execute";

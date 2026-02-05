@@ -14,7 +14,7 @@ import { logger } from "../../utils/logger";
 import { getCircleClient, getWalletSetId } from "./client";
 import type { AgentWalletInfo, TokenBalance, WalletInfo } from "./types";
 
-const BLOCKCHAIN = "EVM-TESTNET";
+const BLOCKCHAIN = "ARC-TESTNET";
 
 /**
  * Get or create a Circle wallet for an agent
