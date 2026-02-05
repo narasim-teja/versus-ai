@@ -100,6 +100,23 @@ async function main() {
     "Circle wallets initialized"
   );
 
+  // Apply Circle wallet IDs to agent configs
+  for (const [agentId, walletInfo] of agentWallets) {
+    const config = agentConfigs.find((c) => c.id === agentId);
+    if (config) {
+      config.circleWalletId = walletInfo.circleWalletId;
+      config.evmAddress = walletInfo.circleWalletAddress as `0x${string}`;
+      logger.info(
+        {
+          agentId,
+          circleWalletId: walletInfo.circleWalletId,
+          evmAddress: walletInfo.circleWalletAddress,
+        },
+        "Applied Circle wallet to agent config"
+      );
+    }
+  }
+
   // Start agents (30 second cycle interval)
   startAllAgents(agentConfigs, 30_000);
   logger.info("Agent loops started");
