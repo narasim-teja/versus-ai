@@ -49,3 +49,14 @@ export {
   stopAllAgents,
   isAgentRunning,
 } from "./runtime";
+
+// Strategies
+export {
+  getStrategy,
+  createStrategy,
+  getStrategyTypes,
+  BaseStrategy,
+  AcademicStrategy,
+  DegenStrategy,
+} from "./strategies";
+export type { Strategy } from "./strategies";

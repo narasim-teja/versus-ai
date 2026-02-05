@@ -27,3 +27,16 @@ export {
   revenueDistributorAbi,
   erc20Abi,
 } from "./abis";
+export {
+  watchBondingCurveEvents,
+  watchCreatorFactory,
+  watchMultipleBondingCurves,
+} from "./events";
+export type {
+  TokensPurchasedEvent,
+  TokensSoldEvent,
+  RevenueAddedEvent,
+  RevenueClaimedEvent,
+  CreatorDeployedEvent,
+  BondingCurveEventCallbacks,
+} from "./events";
