@@ -44,13 +44,12 @@ const aliceStrategy: StrategyConfig = {
   },
 };
 
-export function createAliceConfig(): AgentConfig {
+export function createAliceConfig(circleWalletAddress?: string): AgentConfig {
   return {
     id: "alice",
     name: "Alice (Academic)",
-    circleWalletId: undefined, // Set when wallet is created
-    evmPrivateKey: env.ALICE_PRIVATE_KEY as `0x${string}`,
-    evmAddress: env.ALICE_EVM_ADDRESS as Address,
+    circleWalletId: undefined, // Set during agent initialization
+    evmAddress: (circleWalletAddress || "0x0000000000000000000000000000000000000000") as Address,
     tokenAddress: env.ALICE_TOKEN_ADDRESS as Address,
     bondingCurveAddress: env.ALICE_BONDING_CURVE_ADDRESS as Address,
     strategyType: "academic",

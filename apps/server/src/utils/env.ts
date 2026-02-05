@@ -20,15 +20,11 @@ const envSchema = z.object({
   STORK_API_KEY: z.string().min(1),
   STORK_REST_URL: z.string().url().default("https://rest.jp.stork-oracle.network"),
 
-  // Agent Alice
-  ALICE_PRIVATE_KEY: z.string().startsWith("0x"),
-  ALICE_EVM_ADDRESS: z.string().startsWith("0x"),
+  // Agent Alice - Token/BondingCurve addresses (EVM address comes from Circle wallet)
   ALICE_TOKEN_ADDRESS: z.string().startsWith("0x"),
   ALICE_BONDING_CURVE_ADDRESS: z.string().startsWith("0x"),
 
-  // Agent Bob
-  BOB_PRIVATE_KEY: z.string().startsWith("0x"),
-  BOB_EVM_ADDRESS: z.string().startsWith("0x"),
+  // Agent Bob - Token/BondingCurve addresses (EVM address comes from Circle wallet)
   BOB_TOKEN_ADDRESS: z.string().startsWith("0x"),
   BOB_BONDING_CURVE_ADDRESS: z.string().startsWith("0x"),
 

@@ -60,11 +60,9 @@ export interface AgentConfig {
   id: string;
   /** Display name */
   name: string;
-  /** Circle wallet ID for USDC operations */
+  /** Circle wallet ID for transaction execution */
   circleWalletId?: string;
-  /** Private key for on-chain transactions */
-  evmPrivateKey: `0x${string}`;
-  /** Derived EVM address */
+  /** EVM address (from Circle wallet) */
   evmAddress: Address;
   /** Agent's own token address */
   tokenAddress: Address;
