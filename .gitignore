@@ -48,6 +48,13 @@ typechain-types
 **/ignition/deployments/*/build-info
 **/ignition/deployments/*/artifacts
 
+# Circle Recovery Files (sensitive - never commit!)
+.circle-recovery
+*.circle-recovery
+
 # Misc
 *.tsbuildinfo
 .eslintcache
+
+# local db 
+apps/server/data

@@ -17,6 +17,7 @@ import { logger } from "./utils/logger";
 import { initializeDatabase } from "./db/client";
 import { healthRoutes, agentRoutes, agentsWebsocket } from "./api/routes";
 import { createAllAgentConfigs, startAllAgents, stopAllAgents } from "./agents";
+import { initializeAgentWallets } from "./agents/init";
 
 // Create Hono app
 const app = new Hono();
@@ -90,6 +91,13 @@ async function main() {
   logger.info(
     { agents: agentConfigs.map((a) => a.id) },
     "Agent configurations loaded"
+  );
+
+  // Initialize Circle wallets for agents
+  const agentWallets = await initializeAgentWallets(agentConfigs);
+  logger.info(
+    { walletCount: agentWallets.size },
+    "Circle wallets initialized"
   );
 
   // Start agents (30 second cycle interval)

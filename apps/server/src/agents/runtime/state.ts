@@ -19,10 +19,13 @@ import {
   getLendingPool,
   getUSDC,
   getERC20,
-  addresses,
 } from "../../integrations/chain/contracts";
-import { getPublicClient } from "../../integrations/chain/client";
 import { getMarketSentiment } from "../../integrations/stork";
+import {
+  getWalletByAgentId,
+  getUsdcBalance as getCircleUsdcBalance,
+} from "../../integrations/circle/wallet";
+import { isCircleConfigured } from "../../integrations/circle/client";
 import { logger } from "../../utils/logger";
 import type {
   AgentConfig,
@@ -70,10 +73,33 @@ async function readOwnTokenData(config: AgentConfig): Promise<{
 
 /**
  * Read USDC balance for agent
+ *
+ * Uses Circle wallet if available, falls back to on-chain balance.
  */
-async function readUsdcBalance(address: Address): Promise<bigint> {
+async function readUsdcBalance(agentId: string, evmAddress: Address): Promise<bigint> {
+  // Try Circle wallet first
+  if (isCircleConfigured()) {
+    try {
+      const circleWallet = await getWalletByAgentId(agentId);
+      if (circleWallet) {
+        const balance = await getCircleUsdcBalance(circleWallet.id);
+        logger.debug(
+          { agentId, circleWalletId: circleWallet.id, balance: balance.toString() },
+          "Read USDC balance from Circle wallet"
+        );
+        return balance;
+      }
+    } catch (error) {
+      logger.warn(
+        { agentId, error },
+        "Failed to read Circle wallet balance, falling back to on-chain"
+      );
+    }
+  }
+
+  // Fallback to on-chain USDC balance
   const usdc = getUSDC();
-  const balance = await usdc.read.balanceOf([address]);
+  const balance = await usdc.read.balanceOf([evmAddress]);
   return balance as bigint;
 }
 
@@ -190,7 +216,6 @@ async function readHoldings(config: AgentConfig): Promise<Holding[]> {
         currentPrice = (await bondingCurve.read.getPrice()) as bigint;
       }
 
-      const balance = BigInt(h.balance);
       const avgBuyPrice = BigInt(h.avgBuyPrice);
       const totalCostBasis = BigInt(h.totalCostBasis);
 
@@ -296,7 +321,7 @@ export async function readAgentState(config: AgentConfig): Promise<AgentState> {
       otherCreators,
     ] = await Promise.all([
       readOwnTokenData(config),
-      readUsdcBalance(config.evmAddress),
+      readUsdcBalance(config.id, config.evmAddress),
       readLoanInfo(config.evmAddress),
       readHoldings(config),
       getMarketSentiment(),
