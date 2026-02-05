@@ -81,8 +81,12 @@ export interface AgentConfig {
 export interface Holding {
   /** Token contract address */
   tokenAddress: Address;
+  /** Bonding curve address for this token */
+  bondingCurveAddress: Address;
   /** Token name/symbol */
   tokenName: string;
+  /** Token decimals (typically 18) */
+  tokenDecimals: number;
   /** Token balance (in token decimals) */
   balance: bigint;
   /** Average purchase price (6 decimals) */

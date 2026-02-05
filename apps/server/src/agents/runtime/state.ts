@@ -123,8 +123,10 @@ async function readLoanInfo(agentAddress: Address): Promise<LoanInfo | null> {
     const collateralAmount = loan[1] as bigint;
 
     // Get health factor
+    // Health factor is returned with 18 decimal precision (1e18 = 1.0)
+    // A health factor of 1.5 would be 1.5e18 = 1500000000000000000
     const healthFactor = await lendingPool.read.getHealthFactor([agentAddress]);
-    const healthFactorNumber = Number(healthFactor) / 10000; // Assuming 4 decimal precision
+    const healthFactorNumber = Number(healthFactor as bigint) / 1e18;
 
     // Get collateral value in USDC
     const collateralValue = await lendingPool.read.getCollateralValue([
@@ -197,30 +199,38 @@ async function readHoldings(config: AgentConfig): Promise<Holding[]> {
         continue;
       }
 
-      // Get current token balance
+      // Get bonding curve address - skip if not found
+      const bondingCurveAddr = tokenToBondingCurve.get(tokenAddress.toLowerCase());
+      if (!bondingCurveAddr) {
+        logger.warn(
+          { tokenAddress },
+          "No bonding curve found for token, skipping"
+        );
+        continue;
+      }
+
+      // Get current token balance and decimals
       const token = getERC20(tokenAddress);
-      const currentBalance = (await token.read.balanceOf([
-        config.evmAddress,
-      ])) as bigint;
+      const [currentBalance, tokenDecimals] = await Promise.all([
+        token.read.balanceOf([config.evmAddress]),
+        token.read.decimals(),
+      ]);
 
       // Skip if no balance
-      if (currentBalance === BigInt(0)) {
+      if ((currentBalance as bigint) === BigInt(0)) {
         continue;
       }
 
       // Get current price from bonding curve
-      let currentPrice = BigInt(0);
-      const bondingCurveAddr = tokenToBondingCurve.get(tokenAddress.toLowerCase());
-      if (bondingCurveAddr) {
-        const bondingCurve = getBondingCurve(bondingCurveAddr);
-        currentPrice = (await bondingCurve.read.getPrice()) as bigint;
-      }
+      const bondingCurve = getBondingCurve(bondingCurveAddr);
+      const currentPrice = (await bondingCurve.read.getPrice()) as bigint;
 
       const avgBuyPrice = BigInt(h.avgBuyPrice);
       const totalCostBasis = BigInt(h.totalCostBasis);
 
-      // Calculate P&L
-      const currentValue = (currentBalance * currentPrice) / BigInt(10 ** 18); // Assuming 18 decimal tokens
+      // Calculate P&L using actual token decimals
+      const decimals = Number(tokenDecimals);
+      const currentValue = (currentBalance as bigint * currentPrice) / BigInt(10 ** decimals);
       const unrealizedPnl = currentValue - totalCostBasis;
       const pnlPercent =
         totalCostBasis > BigInt(0)
@@ -229,8 +239,10 @@ async function readHoldings(config: AgentConfig): Promise<Holding[]> {
 
       enrichedHoldings.push({
         tokenAddress,
+        bondingCurveAddress: bondingCurveAddr,
         tokenName: h.tokenName || "Unknown",
-        balance: currentBalance,
+        tokenDecimals: decimals,
+        balance: currentBalance as bigint,
         avgBuyPrice,
         totalCostBasis,
         currentPrice,

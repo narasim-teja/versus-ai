@@ -20,7 +20,6 @@ import type {
   BuyTokenParams,
   ClaimRevenueParams,
   DecisionResult,
-  Holding,
   OtherCreator,
   RepayParams,
   SellTokenParams,
@@ -117,7 +116,7 @@ function checkTreasuryLow(
   actions: Action[]
 ): boolean {
   const { usdcBalance } = state;
-  const { minTreasuryBuffer, borrowTrigger } = config.strategy;
+  const { minTreasuryBuffer } = config.strategy;
 
   if (usdcBalance >= minTreasuryBuffer) {
     thinking.push({
@@ -145,7 +144,6 @@ function checkTreasuryLow(
 
   // Option 1: Sell holdings at a loss if necessary
   const profitableHoldings = state.holdings.filter((h) => h.pnlPercent > 0);
-  const anyHoldings = state.holdings.filter((h) => h.balance > BigInt(0));
 
   if (profitableHoldings.length > 0) {
     // Sell most profitable holding first
@@ -154,14 +152,18 @@ function checkTreasuryLow(
     )[0];
     const sellAmount = toSell.balance; // Sell all
 
+    // Calculate expected output with 5% slippage tolerance for emergency sells
+    const expectedOutput = (sellAmount * toSell.currentPrice) / BigInt(10 ** toSell.tokenDecimals);
+    const minUsdcOut = (expectedOutput * BigInt(95)) / BigInt(100); // 5% slippage
+
     actions.push({
       type: "SELL_TOKEN",
       params: {
         tokenAddress: toSell.tokenAddress,
-        bondingCurveAddress: toSell.tokenAddress, // Need to look up
+        bondingCurveAddress: toSell.bondingCurveAddress,
         tokenName: toSell.tokenName,
         tokenAmount: sellAmount,
-        minUsdcOut: BigInt(0), // Accept any price in emergency
+        minUsdcOut,
       } as SellTokenParams,
       reason: `Treasury low, selling ${toSell.tokenName} (${toSell.pnlPercent.toFixed(1)}% profit)`,
       confidence: 0.85,
@@ -445,14 +447,18 @@ function evaluateSellOpportunities(
         },
       });
 
+      // Calculate expected output with 2% slippage tolerance for stop loss
+      const expectedOutput = (balance * holding.currentPrice) / BigInt(10 ** holding.tokenDecimals);
+      const minUsdcOut = (expectedOutput * BigInt(98)) / BigInt(100);
+
       actions.push({
         type: "SELL_TOKEN",
         params: {
           tokenAddress,
-          bondingCurveAddress: tokenAddress, // Need lookup in execution
+          bondingCurveAddress: holding.bondingCurveAddress,
           tokenName,
           tokenAmount: balance,
-          minUsdcOut: BigInt(0),
+          minUsdcOut,
         } as SellTokenParams,
         reason: `Stop loss: ${tokenName} at ${pnlPercent.toFixed(1)}% loss`,
         confidence: 0.85,
@@ -477,14 +483,18 @@ function evaluateSellOpportunities(
       // Sell half to lock in profits
       const sellAmount = balance / BigInt(2);
 
+      // Calculate expected output with 1% slippage tolerance for profit take
+      const expectedOutput = (sellAmount * holding.currentPrice) / BigInt(10 ** holding.tokenDecimals);
+      const minUsdcOut = (expectedOutput * BigInt(99)) / BigInt(100);
+
       actions.push({
         type: "SELL_TOKEN",
         params: {
           tokenAddress,
-          bondingCurveAddress: tokenAddress, // Need lookup in execution
+          bondingCurveAddress: holding.bondingCurveAddress,
           tokenName,
           tokenAmount: sellAmount,
-          minUsdcOut: BigInt(0),
+          minUsdcOut,
         } as SellTokenParams,
         reason: `Profit take: ${tokenName} at +${pnlPercent.toFixed(1)}%, selling 50%`,
         confidence: 0.8,

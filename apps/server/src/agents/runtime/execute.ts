@@ -6,17 +6,19 @@
  */
 
 import type { Address } from "viem";
+import { eq, and } from "drizzle-orm";
 import { getPublicClient } from "../../integrations/chain/client";
 import { erc20Abi } from "../../integrations/chain/abis";
-import { addresses } from "../../integrations/chain/contracts";
+import { addresses, getBondingCurve } from "../../integrations/chain/contracts";
 import {
   executeContractCall,
   waitForConfirmation,
 } from "../../integrations/circle/transactions";
+import { db } from "../../db/client";
+import { holdings } from "../../db/schema";
 import { logger } from "../../utils/logger";
 import type {
   Action,
-  ActionType,
   AgentConfig,
   BuyTokenParams,
   SellTokenParams,
@@ -30,6 +32,62 @@ import type {
 const MAX_UINT256 = BigInt(
   "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
 );
+
+// Retry configuration
+const MAX_RETRIES = 3;
+const INITIAL_RETRY_DELAY_MS = 1000;
+
+/**
+ * Sleep helper for retry backoff
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Execute a function with exponential backoff retry
+ */
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  context: string,
+  maxRetries: number = MAX_RETRIES
+): Promise<T> {
+  let lastError: Error | null = null;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+
+      // Don't retry on certain errors (user rejection, insufficient funds, etc.)
+      const errorMessage = lastError.message.toLowerCase();
+      if (
+        errorMessage.includes("insufficient") ||
+        errorMessage.includes("rejected") ||
+        errorMessage.includes("denied") ||
+        errorMessage.includes("reverted")
+      ) {
+        logger.warn(
+          { context, error: lastError.message, attempt },
+          "Non-retryable error, not retrying"
+        );
+        throw lastError;
+      }
+
+      if (attempt < maxRetries) {
+        const delayMs = INITIAL_RETRY_DELAY_MS * Math.pow(2, attempt - 1);
+        logger.warn(
+          { context, error: lastError.message, attempt, nextRetryMs: delayMs },
+          "Retrying after error"
+        );
+        await sleep(delayMs);
+      }
+    }
+  }
+
+  throw lastError;
+}
 
 export interface ExecutionResult {
   action: Action;
@@ -125,13 +183,14 @@ async function executeAction(
   config: AgentConfig
 ): Promise<ExecutionResult> {
   const walletId = config.circleWalletId!;
+  const agentId = config.id;
 
   switch (action.type) {
     case "BUY_TOKEN":
-      return executeBuyToken(action, walletId, config.evmAddress);
+      return executeBuyToken(action, walletId, config.evmAddress, agentId);
 
     case "SELL_TOKEN":
-      return executeSellToken(action, walletId, config.evmAddress);
+      return executeSellToken(action, walletId, config.evmAddress, agentId);
 
     case "CLAIM_REVENUE":
       return executeClaimRevenue(action, walletId);
@@ -157,19 +216,49 @@ async function executeAction(
   }
 }
 
+// Default slippage tolerance (1% = 100 basis points)
+const DEFAULT_SLIPPAGE_BPS = 100;
+
 /**
  * Execute BUY_TOKEN action
- * 1. Approve USDC spending on bonding curve
- * 2. Call bondingCurve.buy(usdcAmount, minTokensOut)
+ * 1. Get quote from bonding curve for slippage protection
+ * 2. Approve USDC spending on bonding curve
+ * 3. Call bondingCurve.buy(usdcAmount, minTokensOut)
+ * 4. Update holdings database
  */
 async function executeBuyToken(
   action: Action,
   walletId: string,
-  walletAddress: Address
+  walletAddress: Address,
+  agentId: string
 ): Promise<ExecutionResult> {
   const params = action.params as BuyTokenParams;
 
-  // Step 1: Ensure USDC approval
+  // Step 1: Get quote for slippage protection
+  let minTokensOut = params.minTokensOut;
+  if (minTokensOut === BigInt(0)) {
+    try {
+      const bondingCurve = getBondingCurve(params.bondingCurveAddress);
+      const expectedTokens = await bondingCurve.read.getBuyQuote([params.usdcAmount]);
+      // Apply slippage tolerance (1%)
+      minTokensOut = ((expectedTokens as bigint) * BigInt(10000 - DEFAULT_SLIPPAGE_BPS)) / BigInt(10000);
+      logger.info(
+        {
+          usdcAmount: params.usdcAmount.toString(),
+          expectedTokens: (expectedTokens as bigint).toString(),
+          minTokensOut: minTokensOut.toString(),
+        },
+        "Buy quote fetched with slippage protection"
+      );
+    } catch (error) {
+      logger.warn(
+        { error, bondingCurve: params.bondingCurveAddress },
+        "Failed to get buy quote, proceeding without slippage protection"
+      );
+    }
+  }
+
+  // Step 2: Ensure USDC approval
   const approvalResult = await ensureApproval(
     walletId,
     walletAddress,
@@ -186,22 +275,36 @@ async function executeBuyToken(
     };
   }
 
-  // Step 2: Execute buy
+  // Step 3: Execute buy with retry
   try {
-    const tx = await executeContractCall({
-      walletId,
-      contractAddress: params.bondingCurveAddress,
-      abiFunctionSignature: "buy(uint256,uint256)",
-      abiParameters: [params.usdcAmount.toString(), params.minTokensOut.toString()],
-      refId: `buy-${params.tokenName}`,
-    });
+    const confirmed = await withRetry(
+      async () => {
+        const tx = await executeContractCall({
+          walletId,
+          contractAddress: params.bondingCurveAddress,
+          abiFunctionSignature: "buy(uint256,uint256)",
+          abiParameters: [params.usdcAmount.toString(), minTokensOut.toString()],
+          refId: `buy-${params.tokenName}`,
+        });
+        return waitForConfirmation(tx.id);
+      },
+      `buy-${params.tokenName}`
+    );
 
-    const confirmed = await waitForConfirmation(tx.id);
+    // Step 4: Update holdings database (best effort, don't fail the action)
+    // Use minTokensOut as estimate since we don't have exact tokens received
+    await updateHoldingsAfterBuy(
+      agentId,
+      params.tokenAddress,
+      params.tokenName,
+      params.usdcAmount,
+      minTokensOut
+    );
 
     return {
       action,
       success: true,
-      transactionId: tx.id,
+      transactionId: confirmed.id,
       txHash: confirmed.txHash,
       approvalTxHash: approvalResult?.txHash,
     };
@@ -217,17 +320,44 @@ async function executeBuyToken(
 
 /**
  * Execute SELL_TOKEN action
- * 1. Approve token spending on bonding curve
- * 2. Call bondingCurve.sell(tokenAmount, minUsdcOut)
+ * 1. Get quote from bonding curve for slippage protection
+ * 2. Approve token spending on bonding curve
+ * 3. Call bondingCurve.sell(tokenAmount, minUsdcOut)
+ * 4. Update holdings database
  */
 async function executeSellToken(
   action: Action,
   walletId: string,
-  walletAddress: Address
+  walletAddress: Address,
+  agentId: string
 ): Promise<ExecutionResult> {
   const params = action.params as SellTokenParams;
 
-  // Step 1: Ensure token approval
+  // Step 1: Get quote for slippage protection if not provided
+  let minUsdcOut = params.minUsdcOut;
+  if (minUsdcOut === BigInt(0)) {
+    try {
+      const bondingCurve = getBondingCurve(params.bondingCurveAddress);
+      const expectedUsdc = await bondingCurve.read.getSellQuote([params.tokenAmount]);
+      // Apply slippage tolerance (1%)
+      minUsdcOut = ((expectedUsdc as bigint) * BigInt(10000 - DEFAULT_SLIPPAGE_BPS)) / BigInt(10000);
+      logger.info(
+        {
+          tokenAmount: params.tokenAmount.toString(),
+          expectedUsdc: (expectedUsdc as bigint).toString(),
+          minUsdcOut: minUsdcOut.toString(),
+        },
+        "Sell quote fetched with slippage protection"
+      );
+    } catch (error) {
+      logger.warn(
+        { error, bondingCurve: params.bondingCurveAddress },
+        "Failed to get sell quote, proceeding without slippage protection"
+      );
+    }
+  }
+
+  // Step 2: Ensure token approval
   const approvalResult = await ensureApproval(
     walletId,
     walletAddress,
@@ -244,22 +374,35 @@ async function executeSellToken(
     };
   }
 
-  // Step 2: Execute sell
+  // Step 3: Execute sell with retry
   try {
-    const tx = await executeContractCall({
-      walletId,
-      contractAddress: params.bondingCurveAddress,
-      abiFunctionSignature: "sell(uint256,uint256)",
-      abiParameters: [params.tokenAmount.toString(), params.minUsdcOut.toString()],
-      refId: `sell-${params.tokenName}`,
-    });
+    const confirmed = await withRetry(
+      async () => {
+        const tx = await executeContractCall({
+          walletId,
+          contractAddress: params.bondingCurveAddress,
+          abiFunctionSignature: "sell(uint256,uint256)",
+          abiParameters: [params.tokenAmount.toString(), minUsdcOut.toString()],
+          refId: `sell-${params.tokenName}`,
+        });
+        return waitForConfirmation(tx.id);
+      },
+      `sell-${params.tokenName}`
+    );
 
-    const confirmed = await waitForConfirmation(tx.id);
+    // Step 4: Update holdings database (best effort, don't fail the action)
+    // Use minUsdcOut as estimate since we don't have exact USDC received
+    await updateHoldingsAfterSell(
+      agentId,
+      params.tokenAddress,
+      params.tokenAmount,
+      minUsdcOut
+    );
 
     return {
       action,
       success: true,
-      transactionId: tx.id,
+      transactionId: confirmed.id,
       txHash: confirmed.txHash,
       approvalTxHash: approvalResult?.txHash,
     };
@@ -609,5 +752,183 @@ async function ensureApproval(
       success: false,
       error: errorMessage,
     };
+  }
+}
+
+// ============================================
+// Holdings Database Updates
+// ============================================
+
+/**
+ * Update holdings after a successful buy
+ */
+export async function updateHoldingsAfterBuy(
+  agentId: string,
+  tokenAddress: Address,
+  tokenName: string,
+  usdcSpent: bigint,
+  tokensReceived: bigint
+): Promise<void> {
+  try {
+    // Check if holding already exists
+    const existing = await db.query.holdings.findFirst({
+      where: and(
+        eq(holdings.agentId, agentId),
+        eq(holdings.tokenAddress, tokenAddress)
+      ),
+    });
+
+    if (existing) {
+      // Update existing holding with new average price
+      const existingBalance = BigInt(existing.balance);
+      const existingCostBasis = BigInt(existing.totalCostBasis);
+
+      const newBalance = existingBalance + tokensReceived;
+      const newCostBasis = existingCostBasis + usdcSpent;
+      // New avg price = total cost / total tokens (in USDC per token, 6 decimals)
+      const newAvgPrice = newBalance > BigInt(0)
+        ? (newCostBasis * BigInt(1e18)) / newBalance  // Scale for precision
+        : BigInt(0);
+
+      await db
+        .update(holdings)
+        .set({
+          balance: newBalance.toString(),
+          totalCostBasis: newCostBasis.toString(),
+          avgBuyPrice: newAvgPrice.toString(),
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(holdings.agentId, agentId),
+            eq(holdings.tokenAddress, tokenAddress)
+          )
+        );
+
+      logger.info(
+        {
+          agentId,
+          tokenAddress,
+          newBalance: newBalance.toString(),
+          newCostBasis: newCostBasis.toString(),
+        },
+        "Updated existing holding after buy"
+      );
+    } else {
+      // Create new holding
+      const avgPrice = tokensReceived > BigInt(0)
+        ? (usdcSpent * BigInt(1e18)) / tokensReceived
+        : BigInt(0);
+
+      await db.insert(holdings).values({
+        agentId,
+        tokenAddress,
+        tokenName,
+        balance: tokensReceived.toString(),
+        avgBuyPrice: avgPrice.toString(),
+        totalCostBasis: usdcSpent.toString(),
+      });
+
+      logger.info(
+        {
+          agentId,
+          tokenAddress,
+          tokenName,
+          balance: tokensReceived.toString(),
+        },
+        "Created new holding after buy"
+      );
+    }
+  } catch (error) {
+    logger.error(
+      { agentId, tokenAddress, error },
+      "Failed to update holdings after buy"
+    );
+  }
+}
+
+/**
+ * Update holdings after a successful sell
+ */
+export async function updateHoldingsAfterSell(
+  agentId: string,
+  tokenAddress: Address,
+  tokensSold: bigint,
+  usdcReceived: bigint
+): Promise<void> {
+  try {
+    const existing = await db.query.holdings.findFirst({
+      where: and(
+        eq(holdings.agentId, agentId),
+        eq(holdings.tokenAddress, tokenAddress)
+      ),
+    });
+
+    if (!existing) {
+      logger.warn(
+        { agentId, tokenAddress },
+        "No existing holding found for sell update"
+      );
+      return;
+    }
+
+    const existingBalance = BigInt(existing.balance);
+    const existingCostBasis = BigInt(existing.totalCostBasis);
+
+    const newBalance = existingBalance - tokensSold;
+
+    // Reduce cost basis proportionally
+    const proportionSold = existingBalance > BigInt(0)
+      ? (tokensSold * BigInt(10000)) / existingBalance
+      : BigInt(10000);
+    const costBasisReduction = (existingCostBasis * proportionSold) / BigInt(10000);
+    const newCostBasis = existingCostBasis - costBasisReduction;
+
+    if (newBalance <= BigInt(0)) {
+      // Remove holding entirely
+      await db
+        .delete(holdings)
+        .where(
+          and(
+            eq(holdings.agentId, agentId),
+            eq(holdings.tokenAddress, tokenAddress)
+          )
+        );
+
+      logger.info(
+        { agentId, tokenAddress, usdcReceived: usdcReceived.toString() },
+        "Removed holding after full sell"
+      );
+    } else {
+      // Update with reduced balance
+      await db
+        .update(holdings)
+        .set({
+          balance: newBalance.toString(),
+          totalCostBasis: newCostBasis.toString(),
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(holdings.agentId, agentId),
+            eq(holdings.tokenAddress, tokenAddress)
+          )
+        );
+
+      logger.info(
+        {
+          agentId,
+          tokenAddress,
+          newBalance: newBalance.toString(),
+          newCostBasis: newCostBasis.toString(),
+        },
+        "Updated holding after partial sell"
+      );
+    }
+  } catch (error) {
+    logger.error(
+      { agentId, tokenAddress, error },
+      "Failed to update holdings after sell"
+    );
   }
 }
