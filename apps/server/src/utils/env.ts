@@ -32,6 +32,15 @@ const envSchema = z.object({
   OPENROUTER_API_KEY: z.string().min(1).optional(),
   OPENROUTER_MODEL: z.string().default("anthropic/claude-sonnet-4-5-20250929"),
 
+  // Supabase (video storage)
+  SUPABASE_URL: z.string().url().optional(),
+  SUPABASE_SERVICE_KEY: z.string().min(1).optional(),
+  SUPABASE_STORAGE_BUCKET: z.string().default("versus-videos"),
+
+  // Video processing
+  VIDEO_SEGMENT_DURATION: z.coerce.number().default(5),
+  VIDEO_QUALITY: z.string().default("720p"),
+
   // Database
   DATABASE_URL: z.string().default("file:./data/versus.db"),
 

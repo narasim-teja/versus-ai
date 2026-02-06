@@ -122,6 +122,55 @@ export const circleWalletsRelations = relations(circleWallets, ({ one }) => ({
   }),
 }));
 
+/**
+ * Videos table - stores video metadata and crypto material
+ */
+export const videos = sqliteTable("videos", {
+  id: text("id").primaryKey(),
+  agentId: text("agent_id").references(() => agents.id),
+  title: text("title").notNull(),
+  description: text("description"),
+  status: text("status").notNull().default("pending"),
+  durationSeconds: integer("duration_seconds"),
+  totalSegments: integer("total_segments"),
+  quality: text("quality").default("720p"),
+  masterSecret: text("master_secret"),
+  merkleRoot: text("merkle_root"),
+  merkleTreeData: text("merkle_tree_data"),
+  contentUri: text("content_uri"),
+  thumbnailUri: text("thumbnail_uri"),
+  createdAt: integer("created_at").$defaultFn(() => Date.now()),
+  processedAt: integer("processed_at"),
+});
+
+/**
+ * Viewer sessions - temporary auth for key access (replaced by Yellow in Phase 4.5)
+ */
+export const viewerSessions = sqliteTable("viewer_sessions", {
+  id: text("id").primaryKey(),
+  videoId: text("video_id")
+    .notNull()
+    .references(() => videos.id),
+  viewerAddress: text("viewer_address"),
+  segmentsAccessed: integer("segments_accessed").default(0),
+  createdAt: integer("created_at").$defaultFn(() => Date.now()),
+  expiresAt: integer("expires_at").notNull(),
+});
+
+export const videosRelations = relations(videos, ({ one }) => ({
+  agent: one(agents, {
+    fields: [videos.agentId],
+    references: [agents.id],
+  }),
+}));
+
+export const viewerSessionsRelations = relations(viewerSessions, ({ one }) => ({
+  video: one(videos, {
+    fields: [viewerSessions.videoId],
+    references: [videos.id],
+  }),
+}));
+
 // Type exports
 export type Agent = typeof agents.$inferSelect;
 export type NewAgent = typeof agents.$inferInsert;
@@ -131,3 +180,7 @@ export type Holding = typeof holdings.$inferSelect;
 export type NewHolding = typeof holdings.$inferInsert;
 export type CircleWallet = typeof circleWallets.$inferSelect;
 export type NewCircleWallet = typeof circleWallets.$inferInsert;
+export type Video = typeof videos.$inferSelect;
+export type NewVideo = typeof videos.$inferInsert;
+export type ViewerSession = typeof viewerSessions.$inferSelect;
+export type NewViewerSession = typeof viewerSessions.$inferInsert;

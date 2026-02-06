@@ -21,11 +21,15 @@
     "zod": "^3.23.0",
     "pino": "^9.0.0",
     "pino-pretty": "^11.0.0",
-    "better-sqlite3": "^11.0.0"
+    "better-sqlite3": "^11.0.0",
+    "@versus/streaming": "workspace:*",
+    "fluent-ffmpeg": "^2.1.3",
+    "@supabase/supabase-js": "^2.49.1"
   },
   "devDependencies": {
     "@types/bun": "latest",
     "@types/better-sqlite3": "^7.6.11",
+    "@types/fluent-ffmpeg": "^2.1.27",
     "drizzle-kit": "^0.24.0",
     "typescript": "^5.5.0"
   }

@@ -15,7 +15,7 @@ import { logger as honoLogger } from "hono/logger";
 import { env } from "./utils/env";
 import { logger } from "./utils/logger";
 import { initializeDatabase } from "./db/client";
-import { healthRoutes, agentRoutes, agentsWebsocket } from "./api/routes";
+import { healthRoutes, agentRoutes, agentsWebsocket, videoRoutes, streamingRoutes } from "./api/routes";
 import { createAllAgentConfigs, startAllAgents, stopAllAgents } from "./agents";
 import { initializeAgentWallets } from "./agents/init";
 import {
@@ -39,6 +39,8 @@ app.use("*", honoLogger());
 // Routes
 app.route("/health", healthRoutes);
 app.route("/api/agents", agentRoutes);
+app.route("/api/videos", videoRoutes);
+app.route("/api/videos", streamingRoutes);
 
 // Root endpoint
 app.get("/", (c) => {
@@ -53,6 +55,11 @@ app.get("/", (c) => {
       decisions: "/api/agents/:id/decisions",
       recentDecisions: "/api/agents/:id/decisions/recent",
       websocket: "/api/agents/:id/ws",
+      videos: "/api/videos",
+      videoUpload: "/api/videos/upload",
+      videoStream: "/api/videos/:videoId/master.m3u8",
+      videoKey: "/api/videos/:videoId/key/:segment",
+      videoSession: "/api/videos/:videoId/session",
     },
   });
 });

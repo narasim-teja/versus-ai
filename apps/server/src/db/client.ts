@@ -94,6 +94,38 @@ export function initializeDatabase() {
     CREATE INDEX IF NOT EXISTS idx_holdings_agent_id ON holdings(agent_id);
     CREATE INDEX IF NOT EXISTS idx_price_history_token ON price_history(token_address);
     CREATE INDEX IF NOT EXISTS idx_market_sentiment_asset ON market_sentiment(asset);
+
+    CREATE TABLE IF NOT EXISTS videos (
+      id TEXT PRIMARY KEY,
+      agent_id TEXT REFERENCES agents(id),
+      title TEXT NOT NULL,
+      description TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      duration_seconds INTEGER,
+      total_segments INTEGER,
+      quality TEXT DEFAULT '720p',
+      master_secret TEXT,
+      merkle_root TEXT,
+      merkle_tree_data TEXT,
+      content_uri TEXT,
+      thumbnail_uri TEXT,
+      created_at INTEGER,
+      processed_at INTEGER
+    );
+
+    CREATE TABLE IF NOT EXISTS viewer_sessions (
+      id TEXT PRIMARY KEY,
+      video_id TEXT NOT NULL REFERENCES videos(id),
+      viewer_address TEXT,
+      segments_accessed INTEGER DEFAULT 0,
+      created_at INTEGER,
+      expires_at INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_videos_agent_id ON videos(agent_id);
+    CREATE INDEX IF NOT EXISTS idx_videos_status ON videos(status);
+    CREATE INDEX IF NOT EXISTS idx_viewer_sessions_video_id ON viewer_sessions(video_id);
+    CREATE INDEX IF NOT EXISTS idx_viewer_sessions_expires ON viewer_sessions(expires_at);
   `);
 
   logger.info("Database tables initialized");
