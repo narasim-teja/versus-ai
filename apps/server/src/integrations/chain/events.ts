@@ -1,12 +1,14 @@
 /**
  * Chain Event Watchers
  *
- * Provides event listeners for on-chain events using viem's watchContractEvent.
+ * Provides event listeners for on-chain events using eth_getLogs-based polling.
+ * This avoids eth_newFilter/eth_getFilterChanges which many RPC nodes (including
+ * Arc Testnet) don't support reliably — filters expire causing "filter not found" errors.
  * Each watcher returns an unwatch function for cleanup.
  * Errors are deduplicated to avoid log spam when RPC is down.
  */
 
-import type { Address, Log } from "viem";
+import type { Address, Log, Abi } from "viem";
 import { getPublicClient } from "./client";
 import { bondingCurveAbi, creatorFactoryAbi } from "./abis";
 import { addresses } from "./contracts";
@@ -27,6 +29,89 @@ function shouldLogError(key: string): boolean {
   }
   lastErrorByKey.set(key, now);
   return true;
+}
+
+// ============================================
+// eth_getLogs-based Polling (replaces filter-based watchContractEvent)
+// ============================================
+
+const POLL_INTERVAL_MS = 4_000; // Poll every 4 seconds
+
+interface PollContractEventsOptions {
+  address: Address;
+  abi: Abi;
+  eventName: string;
+  onLogs: (logs: Array<Log & { args: Record<string, unknown> }>) => void;
+  onError: (error: Error) => void;
+  pollInterval?: number;
+}
+
+/**
+ * Poll for contract events using getContractEvents (eth_getLogs).
+ * This is stateless and doesn't rely on server-side filter persistence.
+ * Returns an unwatch function to stop polling.
+ */
+function pollContractEvents(options: PollContractEventsOptions): () => void {
+  const {
+    address,
+    abi,
+    eventName,
+    onLogs,
+    onError,
+    pollInterval = POLL_INTERVAL_MS,
+  } = options;
+  const client = getPublicClient();
+  let lastBlock: bigint | null = null;
+  let stopped = false;
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+  async function poll() {
+    if (stopped) return;
+    try {
+      const currentBlock = await client.getBlockNumber();
+
+      // On first poll, just record the current block — don't fetch historical events
+      if (lastBlock === null) {
+        lastBlock = currentBlock;
+        return;
+      }
+
+      // No new blocks since last poll
+      if (currentBlock <= lastBlock) return;
+
+      const fromBlock = lastBlock + 1n;
+      const logs = await client.getContractEvents({
+        address,
+        abi,
+        eventName,
+        fromBlock,
+        toBlock: currentBlock,
+      });
+
+      lastBlock = currentBlock;
+
+      if (logs.length > 0) {
+        onLogs(logs as unknown as Array<Log & { args: Record<string, unknown> }>);
+      }
+    } catch (error) {
+      onError(error as Error);
+    } finally {
+      if (!stopped) {
+        timeoutId = setTimeout(poll, pollInterval);
+      }
+    }
+  }
+
+  // Start the first poll
+  poll();
+
+  // Return unwatch function
+  return () => {
+    stopped = true;
+    if (timeoutId !== null) {
+      clearTimeout(timeoutId);
+    }
+  };
 }
 
 // ============================================
@@ -87,15 +172,14 @@ export function watchBondingCurveEvents(
   bondingCurveAddress: Address,
   callbacks: BondingCurveEventCallbacks
 ): () => void {
-  const client = getPublicClient();
   const unwatchers: Array<() => void> = [];
   const addrShort = bondingCurveAddress.slice(0, 10);
 
   // Watch TokensPurchased
   if (callbacks.onPurchase) {
-    const unwatch = client.watchContractEvent({
+    const unwatch = pollContractEvents({
       address: bondingCurveAddress,
-      abi: bondingCurveAbi,
+      abi: bondingCurveAbi as Abi,
       eventName: "TokensPurchased",
       onLogs: (logs) => {
         for (const log of logs) {
@@ -124,7 +208,7 @@ export function watchBondingCurveEvents(
         const key = `TokensPurchased:${addrShort}`;
         if (shouldLogError(key)) {
           logger.warn(
-            { event: "TokensPurchased", address: addrShort, error: (error as Error).message },
+            { event: "TokensPurchased", address: addrShort, error: error.message },
             "Event watcher error (will retry automatically)"
           );
         }
@@ -135,9 +219,9 @@ export function watchBondingCurveEvents(
 
   // Watch TokensSold
   if (callbacks.onSale) {
-    const unwatch = client.watchContractEvent({
+    const unwatch = pollContractEvents({
       address: bondingCurveAddress,
-      abi: bondingCurveAbi,
+      abi: bondingCurveAbi as Abi,
       eventName: "TokensSold",
       onLogs: (logs) => {
         for (const log of logs) {
@@ -166,7 +250,7 @@ export function watchBondingCurveEvents(
         const key = `TokensSold:${addrShort}`;
         if (shouldLogError(key)) {
           logger.warn(
-            { event: "TokensSold", address: addrShort, error: (error as Error).message },
+            { event: "TokensSold", address: addrShort, error: error.message },
             "Event watcher error (will retry automatically)"
           );
         }
@@ -177,9 +261,9 @@ export function watchBondingCurveEvents(
 
   // Watch RevenueAdded
   if (callbacks.onRevenueAdded) {
-    const unwatch = client.watchContractEvent({
+    const unwatch = pollContractEvents({
       address: bondingCurveAddress,
-      abi: bondingCurveAbi,
+      abi: bondingCurveAbi as Abi,
       eventName: "RevenueAdded",
       onLogs: (logs) => {
         for (const log of logs) {
@@ -204,7 +288,7 @@ export function watchBondingCurveEvents(
         const key = `RevenueAdded:${addrShort}`;
         if (shouldLogError(key)) {
           logger.warn(
-            { event: "RevenueAdded", address: addrShort, error: (error as Error).message },
+            { event: "RevenueAdded", address: addrShort, error: error.message },
             "Event watcher error (will retry automatically)"
           );
         }
@@ -215,9 +299,9 @@ export function watchBondingCurveEvents(
 
   // Watch RevenueClaimed
   if (callbacks.onRevenueClaimed) {
-    const unwatch = client.watchContractEvent({
+    const unwatch = pollContractEvents({
       address: bondingCurveAddress,
-      abi: bondingCurveAbi,
+      abi: bondingCurveAbi as Abi,
       eventName: "RevenueClaimed",
       onLogs: (logs) => {
         for (const log of logs) {
@@ -242,7 +326,7 @@ export function watchBondingCurveEvents(
         const key = `RevenueClaimed:${addrShort}`;
         if (shouldLogError(key)) {
           logger.warn(
-            { event: "RevenueClaimed", address: addrShort, error: (error as Error).message },
+            { event: "RevenueClaimed", address: addrShort, error: error.message },
             "Event watcher error (will retry automatically)"
           );
         }
@@ -286,11 +370,9 @@ export function watchBondingCurveEvents(
 export function watchCreatorFactory(
   onNewCreator: (event: CreatorDeployedEvent, log: Log) => void
 ): () => void {
-  const client = getPublicClient();
-
-  const unwatch = client.watchContractEvent({
+  const unwatch = pollContractEvents({
     address: addresses.creatorFactory,
-    abi: creatorFactoryAbi,
+    abi: creatorFactoryAbi as Abi,
     eventName: "CreatorDeployed",
     onLogs: (logs) => {
       for (const log of logs) {
@@ -320,7 +402,7 @@ export function watchCreatorFactory(
     onError: (error) => {
       if (shouldLogError("CreatorDeployed")) {
         logger.warn(
-          { event: "CreatorDeployed", error: (error as Error).message },
+          { event: "CreatorDeployed", error: error.message },
           "Factory watcher error (will retry automatically)"
         );
       }
