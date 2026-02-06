@@ -6,6 +6,7 @@
 
 export { readAgentState, resetCycleCounter } from "./state";
 export { decide } from "./decide";
+export { llmDecide } from "./llm-decide";
 export {
   logDecision,
   logExecutionResults,

@@ -28,6 +28,10 @@ const envSchema = z.object({
   BOB_TOKEN_ADDRESS: z.string().startsWith("0x"),
   BOB_BONDING_CURVE_ADDRESS: z.string().startsWith("0x"),
 
+  // OpenRouter (optional - falls back to rule-based decisions if not set)
+  OPENROUTER_API_KEY: z.string().min(1).optional(),
+  OPENROUTER_MODEL: z.string().default("anthropic/claude-sonnet-4-5-20250929"),
+
   // Database
   DATABASE_URL: z.string().default("file:./data/versus.db"),
 

@@ -275,7 +275,21 @@ async function executeBuyToken(
     };
   }
 
-  // Step 3: Execute buy with retry
+  // Step 3: Snapshot token balance before buy
+  const publicClient = getPublicClient();
+  let balanceBefore = BigInt(0);
+  try {
+    balanceBefore = (await publicClient.readContract({
+      address: params.tokenAddress,
+      abi: erc20Abi,
+      functionName: "balanceOf",
+      args: [walletAddress],
+    })) as bigint;
+  } catch (error) {
+    logger.warn({ error }, "Failed to read token balance before buy");
+  }
+
+  // Step 4: Execute buy with retry
   try {
     const confirmed = await withRetry(
       async () => {
@@ -291,14 +305,30 @@ async function executeBuyToken(
       `buy-${params.tokenName}`
     );
 
-    // Step 4: Update holdings database (best effort, don't fail the action)
-    // Use minTokensOut as estimate since we don't have exact tokens received
+    // Step 5: Read actual tokens received from on-chain balance diff
+    let tokensReceived = minTokensOut; // fallback to estimate
+    try {
+      const balanceAfter = (await publicClient.readContract({
+        address: params.tokenAddress,
+        abi: erc20Abi,
+        functionName: "balanceOf",
+        args: [walletAddress],
+      })) as bigint;
+      const diff = balanceAfter - balanceBefore;
+      if (diff > BigInt(0)) {
+        tokensReceived = diff;
+      }
+    } catch (error) {
+      logger.warn({ error }, "Failed to read token balance after buy, using estimate");
+    }
+
+    // Step 6: Update holdings database (best effort, don't fail the action)
     await updateHoldingsAfterBuy(
       agentId,
       params.tokenAddress,
       params.tokenName,
       params.usdcAmount,
-      minTokensOut
+      tokensReceived
     );
 
     return {
@@ -374,7 +404,21 @@ async function executeSellToken(
     };
   }
 
-  // Step 3: Execute sell with retry
+  // Step 3: Snapshot USDC balance before sell
+  const publicClient = getPublicClient();
+  let usdcBefore = BigInt(0);
+  try {
+    usdcBefore = (await publicClient.readContract({
+      address: addresses.usdc as Address,
+      abi: erc20Abi,
+      functionName: "balanceOf",
+      args: [walletAddress],
+    })) as bigint;
+  } catch (error) {
+    logger.warn({ error }, "Failed to read USDC balance before sell");
+  }
+
+  // Step 4: Execute sell with retry
   try {
     const confirmed = await withRetry(
       async () => {
@@ -390,13 +434,29 @@ async function executeSellToken(
       `sell-${params.tokenName}`
     );
 
-    // Step 4: Update holdings database (best effort, don't fail the action)
-    // Use minUsdcOut as estimate since we don't have exact USDC received
+    // Step 5: Read actual USDC received from on-chain balance diff
+    let usdcReceived = minUsdcOut; // fallback to estimate
+    try {
+      const usdcAfter = (await publicClient.readContract({
+        address: addresses.usdc as Address,
+        abi: erc20Abi,
+        functionName: "balanceOf",
+        args: [walletAddress],
+      })) as bigint;
+      const diff = usdcAfter - usdcBefore;
+      if (diff > BigInt(0)) {
+        usdcReceived = diff;
+      }
+    } catch (error) {
+      logger.warn({ error }, "Failed to read USDC balance after sell, using estimate");
+    }
+
+    // Step 6: Update holdings database (best effort, don't fail the action)
     await updateHoldingsAfterSell(
       agentId,
       params.tokenAddress,
       params.tokenAmount,
-      minUsdcOut
+      usdcReceived
     );
 
     return {

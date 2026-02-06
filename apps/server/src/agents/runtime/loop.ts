@@ -14,6 +14,7 @@ import { logger } from "../../utils/logger";
 import type { AgentConfig, AgentRuntimeStatus, DecisionResult } from "../types";
 import { readAgentState, resetCycleCounter } from "./state";
 import { decide } from "./decide";
+import { llmDecide } from "./llm-decide";
 import { logDecision, logExecutionResults } from "./logger";
 import { executeActions } from "./execute";
 
@@ -31,12 +32,14 @@ const agentRuntimes = new Map<string, AgentRuntime>();
 class AgentRuntime {
   private config: AgentConfig;
   private isRunning: boolean = false;
+  private isCycleRunning: boolean = false;
   private currentCycle: number = 0;
   private lastDecisionTime: Date | null = null;
   private lastError: string | null = null;
   private intervalId: ReturnType<typeof setInterval> | null = null;
   private cycleIntervalMs: number;
   private pendingActions: number = 0;
+  private recentTxHashes: string[] = [];
 
   constructor(config: AgentConfig, cycleIntervalMs?: number) {
     this.config = config;
@@ -96,6 +99,16 @@ class AgentRuntime {
    * Run a single decision cycle
    */
   async runCycle(): Promise<DecisionResult | null> {
+    // Guard against overlapping cycles (e.g., if Circle confirmation takes >30s)
+    if (this.isCycleRunning) {
+      logger.warn(
+        { agentId: this.config.id, cycle: this.currentCycle },
+        "Skipping cycle - previous cycle still running"
+      );
+      return null;
+    }
+
+    this.isCycleRunning = true;
     const cycleStart = Date.now();
     this.currentCycle++;
 
@@ -105,11 +118,11 @@ class AgentRuntime {
     );
 
     try {
-      // Step 1: Read state
-      const state = await readAgentState(this.config);
+      // Step 1: Read state (pass recent tx hashes from last cycle)
+      const state = await readAgentState(this.config, this.recentTxHashes);
 
-      // Step 2: Make decisions
-      const decision = decide(state, this.config);
+      // Step 2: Make decisions (LLM-powered with rule-based fallback)
+      const decision = await llmDecide(state, this.config);
 
       // Step 3: Log decision
       const decisionLog = await logDecision(
@@ -141,6 +154,11 @@ class AgentRuntime {
 
         // Step 5: Log execution results
         await logExecutionResults(decisionLog.id, executionResults);
+
+        // Track recent tx hashes for next cycle's state
+        this.recentTxHashes = executionResults
+          .filter((r) => r.txHash)
+          .map((r) => r.txHash!);
 
         // Update pending actions count
         this.pendingActions = executionResults.filter(
@@ -192,6 +210,8 @@ class AgentRuntime {
       );
 
       return null;
+    } finally {
+      this.isCycleRunning = false;
     }
   }
 

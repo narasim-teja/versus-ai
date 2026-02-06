@@ -127,6 +127,14 @@ contract BondingCurve is IBondingCurve, ReentrancyGuard, Ownable {
         revenueDistributor = revenueDistributor_;
     }
 
+    // ============ Admin Functions ============
+
+    /// @notice Update revenue distributor address (owner only)
+    function setRevenueDistributor(address revenueDistributor_) external onlyOwner {
+        if (revenueDistributor_ == address(0)) revert ZeroAddress();
+        revenueDistributor = revenueDistributor_;
+    }
+
     // ============ View Functions ============
 
     /// @inheritdoc IBondingCurve

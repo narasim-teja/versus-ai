@@ -38,6 +38,61 @@ import type {
 // In-memory cycle counter per agent
 const cycleCounters = new Map<string, number>();
 
+// Cached creator data (refreshed every 5 minutes)
+const CREATOR_CACHE_TTL_MS = 5 * 60 * 1000;
+let creatorCacheTimestamp = 0;
+let cachedTokenToBondingCurve = new Map<string, Address>();
+let cachedCreatorInfos: Array<{ wallet: Address; tokenAddress: Address; bondingCurveAddress: Address }> = [];
+
+/**
+ * Refresh the creator cache if stale
+ */
+async function refreshCreatorCache(): Promise<void> {
+  const now = Date.now();
+  if (now - creatorCacheTimestamp < CREATOR_CACHE_TTL_MS && cachedCreatorInfos.length > 0) {
+    return;
+  }
+
+  const creatorFactory = getCreatorFactory();
+  const creatorWallets = (await creatorFactory.read.getAllCreators()) as readonly Address[];
+
+  const newMap = new Map<string, Address>();
+  const newInfos: typeof cachedCreatorInfos = [];
+
+  for (const wallet of creatorWallets) {
+    try {
+      const creatorInfo = await creatorFactory.read.getCreator([wallet]);
+      const tokenAddr = (creatorInfo as [Address, Address, Address, bigint])[0];
+      const bondingCurveAddr = (creatorInfo as [Address, Address, Address, bigint])[1];
+      newMap.set(tokenAddr.toLowerCase(), bondingCurveAddr);
+      newInfos.push({ wallet, tokenAddress: tokenAddr, bondingCurveAddress: bondingCurveAddr });
+    } catch (error) {
+      logger.warn({ wallet, error }, "Failed to read creator info for cache");
+    }
+  }
+
+  cachedTokenToBondingCurve = newMap;
+  cachedCreatorInfos = newInfos;
+  creatorCacheTimestamp = now;
+  logger.debug({ creatorCount: newMap.size }, "Creator mapping cache refreshed");
+}
+
+/**
+ * Get cached token → bonding curve address mapping
+ */
+async function getTokenToBondingCurveMap(): Promise<Map<string, Address>> {
+  await refreshCreatorCache();
+  return cachedTokenToBondingCurve;
+}
+
+/**
+ * Get cached creator infos (wallet, token, bondingCurve)
+ */
+async function getCachedCreatorInfos(): Promise<typeof cachedCreatorInfos> {
+  await refreshCreatorCache();
+  return cachedCreatorInfos;
+}
+
 /**
  * Get current cycle number for an agent
  */
@@ -174,18 +229,8 @@ async function readHoldings(config: AgentConfig): Promise<Holding[]> {
     return [];
   }
 
-  // Get all creators to find bonding curves for tokens
-  const creatorFactory = getCreatorFactory();
-  const creatorWallets = (await creatorFactory.read.getAllCreators()) as readonly Address[];
-
-  // Build a map of token -> bondingCurve
-  const tokenToBondingCurve = new Map<string, Address>();
-  for (const wallet of creatorWallets) {
-    const creatorInfo = await creatorFactory.read.getCreator([wallet]);
-    const tokenAddr = (creatorInfo as [Address, Address, Address, bigint])[0];
-    const bondingCurveAddr = (creatorInfo as [Address, Address, Address, bigint])[1];
-    tokenToBondingCurve.set(tokenAddr.toLowerCase(), bondingCurveAddr);
-  }
+  // Get cached token → bonding curve mapping
+  const tokenToBondingCurve = await getTokenToBondingCurveMap();
 
   // Enrich with current prices
   const enrichedHoldings: Holding[] = [];
@@ -266,23 +311,17 @@ async function readHoldings(config: AgentConfig): Promise<Holding[]> {
 async function readOtherCreators(
   excludeAddress: Address
 ): Promise<OtherCreator[]> {
-  const creatorFactory = getCreatorFactory();
-  const creatorWallets = (await creatorFactory.read.getAllCreators()) as readonly Address[];
+  const creatorInfos = await getCachedCreatorInfos();
 
   const otherCreators: OtherCreator[] = [];
 
-  for (const creatorWallet of creatorWallets) {
+  for (const { wallet: creatorWallet, tokenAddress, bondingCurveAddress } of creatorInfos) {
     // Skip self
     if (creatorWallet.toLowerCase() === excludeAddress.toLowerCase()) {
       continue;
     }
 
     try {
-      // Get creator info: [token, bondingCurve, wallet, createdAt]
-      const creatorInfo = await creatorFactory.read.getCreator([creatorWallet]);
-      const tokenAddress = (creatorInfo as [Address, Address, Address, bigint])[0];
-      const bondingCurveAddress = (creatorInfo as [Address, Address, Address, bigint])[1];
-
       const bondingCurve = getBondingCurve(bondingCurveAddress);
       const token = getERC20(tokenAddress);
 
@@ -316,7 +355,7 @@ async function readOtherCreators(
  *
  * This is called at the start of each decision cycle.
  */
-export async function readAgentState(config: AgentConfig): Promise<AgentState> {
+export async function readAgentState(config: AgentConfig, pendingTxs: string[] = []): Promise<AgentState> {
   const timestamp = Date.now();
   const cycle = getCycle(config.id);
 
@@ -351,7 +390,7 @@ export async function readAgentState(config: AgentConfig): Promise<AgentState> {
       loan: loanInfo,
       marketSentiment,
       otherCreators,
-      pendingTxs: [], // Will be populated by execution layer
+      pendingTxs,
     };
 
     logger.info(

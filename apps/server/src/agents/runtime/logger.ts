@@ -5,7 +5,7 @@
  * buffer of recent decisions for real-time streaming.
  */
 
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, count } from "drizzle-orm";
 import { db } from "../../db/client";
 import { decisionLogs } from "../../db/schema";
 import { logger } from "../../utils/logger";
@@ -241,17 +241,11 @@ export async function getLatestDecision(
  */
 export async function getDecisionCount(agentId: string): Promise<number> {
   const result = await db
-    .select({ count: decisionLogs.id })
+    .select({ value: count() })
     .from(decisionLogs)
     .where(eq(decisionLogs.agentId, agentId));
 
-  // Count manually since SQLite doesn't have count() aggregate in this context
-  const allRecords = await db.query.decisionLogs.findMany({
-    where: eq(decisionLogs.agentId, agentId),
-    columns: { id: true },
-  });
-
-  return allRecords.length;
+  return result[0]?.value ?? 0;
 }
 
 /**

@@ -58,6 +58,7 @@ export function initializeDatabase() {
       state_snapshot TEXT NOT NULL,
       thinking TEXT NOT NULL,
       actions TEXT NOT NULL,
+      execution_results TEXT,
       created_at INTEGER
     );
 

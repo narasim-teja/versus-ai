@@ -153,7 +153,7 @@ function checkTreasuryLow(
     const sellAmount = toSell.balance; // Sell all
 
     // Calculate expected output with 5% slippage tolerance for emergency sells
-    const expectedOutput = (sellAmount * toSell.currentPrice) / BigInt(10 ** toSell.tokenDecimals);
+    const expectedOutput = (sellAmount * toSell.currentPrice) / (10n ** BigInt(toSell.tokenDecimals || 18));
     const minUsdcOut = (expectedOutput * BigInt(95)) / BigInt(100); // 5% slippage
 
     actions.push({
@@ -448,7 +448,7 @@ function evaluateSellOpportunities(
       });
 
       // Calculate expected output with 2% slippage tolerance for stop loss
-      const expectedOutput = (balance * holding.currentPrice) / BigInt(10 ** holding.tokenDecimals);
+      const expectedOutput = (balance * holding.currentPrice) / (10n ** BigInt(holding.tokenDecimals || 18));
       const minUsdcOut = (expectedOutput * BigInt(98)) / BigInt(100);
 
       actions.push({
@@ -484,7 +484,7 @@ function evaluateSellOpportunities(
       const sellAmount = balance / BigInt(2);
 
       // Calculate expected output with 1% slippage tolerance for profit take
-      const expectedOutput = (sellAmount * holding.currentPrice) / BigInt(10 ** holding.tokenDecimals);
+      const expectedOutput = (sellAmount * holding.currentPrice) / (10n ** BigInt(holding.tokenDecimals || 18));
       const minUsdcOut = (expectedOutput * BigInt(99)) / BigInt(100);
 
       actions.push({
