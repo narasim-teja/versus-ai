@@ -3,6 +3,7 @@
  *
  * Provides event listeners for on-chain events using viem's watchContractEvent.
  * Each watcher returns an unwatch function for cleanup.
+ * Errors are deduplicated to avoid log spam when RPC is down.
  */
 
 import type { Address, Log } from "viem";
@@ -10,6 +11,23 @@ import { getPublicClient } from "./client";
 import { bondingCurveAbi, creatorFactoryAbi } from "./abis";
 import { addresses } from "./contracts";
 import { logger } from "../../utils/logger";
+
+// ============================================
+// Error Deduplication
+// ============================================
+
+const lastErrorByKey = new Map<string, number>();
+const ERROR_COOLDOWN_MS = 60_000; // Only log same error once per minute
+
+function shouldLogError(key: string): boolean {
+  const now = Date.now();
+  const lastTime = lastErrorByKey.get(key);
+  if (lastTime && now - lastTime < ERROR_COOLDOWN_MS) {
+    return false;
+  }
+  lastErrorByKey.set(key, now);
+  return true;
+}
 
 // ============================================
 // Event Types
@@ -71,6 +89,7 @@ export function watchBondingCurveEvents(
 ): () => void {
   const client = getPublicClient();
   const unwatchers: Array<() => void> = [];
+  const addrShort = bondingCurveAddress.slice(0, 10);
 
   // Watch TokensPurchased
   if (callbacks.onPurchase) {
@@ -87,7 +106,7 @@ export function watchBondingCurveEvents(
             newPrice: bigint;
           };
           logger.debug(
-            { event: "TokensPurchased", address: bondingCurveAddress, args },
+            { event: "TokensPurchased", address: addrShort, args },
             "Bonding curve purchase event"
           );
           callbacks.onPurchase!(
@@ -102,10 +121,13 @@ export function watchBondingCurveEvents(
         }
       },
       onError: (error) => {
-        logger.error(
-          { error, event: "TokensPurchased", address: bondingCurveAddress },
-          "Error watching TokensPurchased"
-        );
+        const key = `TokensPurchased:${addrShort}`;
+        if (shouldLogError(key)) {
+          logger.warn(
+            { event: "TokensPurchased", address: addrShort, error: (error as Error).message },
+            "Event watcher error (will retry automatically)"
+          );
+        }
       },
     });
     unwatchers.push(unwatch);
@@ -126,7 +148,7 @@ export function watchBondingCurveEvents(
             newPrice: bigint;
           };
           logger.debug(
-            { event: "TokensSold", address: bondingCurveAddress, args },
+            { event: "TokensSold", address: addrShort, args },
             "Bonding curve sale event"
           );
           callbacks.onSale!(
@@ -141,10 +163,13 @@ export function watchBondingCurveEvents(
         }
       },
       onError: (error) => {
-        logger.error(
-          { error, event: "TokensSold", address: bondingCurveAddress },
-          "Error watching TokensSold"
-        );
+        const key = `TokensSold:${addrShort}`;
+        if (shouldLogError(key)) {
+          logger.warn(
+            { event: "TokensSold", address: addrShort, error: (error as Error).message },
+            "Event watcher error (will retry automatically)"
+          );
+        }
       },
     });
     unwatchers.push(unwatch);
@@ -163,7 +188,7 @@ export function watchBondingCurveEvents(
             newRevenuePerToken: bigint;
           };
           logger.debug(
-            { event: "RevenueAdded", address: bondingCurveAddress, args },
+            { event: "RevenueAdded", address: addrShort, args },
             "Revenue added event"
           );
           callbacks.onRevenueAdded!(
@@ -176,10 +201,13 @@ export function watchBondingCurveEvents(
         }
       },
       onError: (error) => {
-        logger.error(
-          { error, event: "RevenueAdded", address: bondingCurveAddress },
-          "Error watching RevenueAdded"
-        );
+        const key = `RevenueAdded:${addrShort}`;
+        if (shouldLogError(key)) {
+          logger.warn(
+            { event: "RevenueAdded", address: addrShort, error: (error as Error).message },
+            "Event watcher error (will retry automatically)"
+          );
+        }
       },
     });
     unwatchers.push(unwatch);
@@ -198,7 +226,7 @@ export function watchBondingCurveEvents(
             amount: bigint;
           };
           logger.debug(
-            { event: "RevenueClaimed", address: bondingCurveAddress, args },
+            { event: "RevenueClaimed", address: addrShort, args },
             "Revenue claimed event"
           );
           callbacks.onRevenueClaimed!(
@@ -211,10 +239,13 @@ export function watchBondingCurveEvents(
         }
       },
       onError: (error) => {
-        logger.error(
-          { error, event: "RevenueClaimed", address: bondingCurveAddress },
-          "Error watching RevenueClaimed"
-        );
+        const key = `RevenueClaimed:${addrShort}`;
+        if (shouldLogError(key)) {
+          logger.warn(
+            { event: "RevenueClaimed", address: addrShort, error: (error as Error).message },
+            "Event watcher error (will retry automatically)"
+          );
+        }
       },
     });
     unwatchers.push(unwatch);
@@ -222,7 +253,7 @@ export function watchBondingCurveEvents(
 
   logger.info(
     {
-      address: bondingCurveAddress,
+      address: addrShort,
       events: Object.keys(callbacks).filter(
         (k) => callbacks[k as keyof BondingCurveEventCallbacks]
       ),
@@ -236,7 +267,7 @@ export function watchBondingCurveEvents(
       unwatch();
     }
     logger.info(
-      { address: bondingCurveAddress },
+      { address: addrShort },
       "Stopped watching bonding curve events"
     );
   };
@@ -287,15 +318,17 @@ export function watchCreatorFactory(
       }
     },
     onError: (error) => {
-      logger.error(
-        { error, event: "CreatorDeployed" },
-        "Error watching CreatorDeployed"
-      );
+      if (shouldLogError("CreatorDeployed")) {
+        logger.warn(
+          { event: "CreatorDeployed", error: (error as Error).message },
+          "Factory watcher error (will retry automatically)"
+        );
+      }
     },
   });
 
   logger.info(
-    { factory: addresses.creatorFactory },
+    { factory: addresses.creatorFactory.slice(0, 10) },
     "Started watching creator factory events"
   );
 

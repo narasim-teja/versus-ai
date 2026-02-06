@@ -146,8 +146,8 @@ async function readUsdcBalance(agentId: string, evmAddress: Address): Promise<bi
       }
     } catch (error) {
       logger.warn(
-        { agentId, error },
-        "Failed to read Circle wallet balance, falling back to on-chain"
+        { agentId, error: (error as Error).message },
+        "Circle balance unavailable, falling back to on-chain"
       );
     }
   }
@@ -275,7 +275,7 @@ async function readHoldings(config: AgentConfig): Promise<Holding[]> {
 
       // Calculate P&L using actual token decimals
       const decimals = Number(tokenDecimals);
-      const currentValue = (currentBalance as bigint * currentPrice) / BigInt(10 ** decimals);
+      const currentValue = (currentBalance as bigint * currentPrice) / (10n ** BigInt(decimals || 18));
       const unrealizedPnl = currentValue - totalCostBasis;
       const pnlPercent =
         totalCostBasis > BigInt(0)

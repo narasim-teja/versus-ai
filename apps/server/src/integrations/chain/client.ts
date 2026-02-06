@@ -22,7 +22,7 @@ export const arcTestnet: Chain = {
   },
   rpcUrls: {
     default: {
-      http: [process.env.ARC_TESTNET_RPC_URL || "https://rpc.arc.testnet"],
+      http: [process.env.ARC_TESTNET_RPC_URL || "https://rpc.testnet.arc.network"],
     },
   },
   blockExplorers: {

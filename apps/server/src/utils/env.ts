@@ -2,7 +2,7 @@ import { z } from "zod";
 
 const envSchema = z.object({
   // Chain
-  ARC_TESTNET_RPC_URL: z.string().url().default("https://rpc.arc.testnet"),
+  ARC_TESTNET_RPC_URL: z.string().url().default("https://rpc.testnet.arc.network"),
   ARC_CHAIN_ID: z.coerce.number().default(5042002),
 
   // Contracts

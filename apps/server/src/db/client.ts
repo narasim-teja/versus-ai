@@ -45,7 +45,7 @@ export function initializeDatabase() {
       id TEXT PRIMARY KEY,
       agent_id TEXT REFERENCES agents(id),
       address TEXT NOT NULL,
-      blockchain TEXT NOT NULL DEFAULT 'EVM-TESTNET',
+      blockchain TEXT NOT NULL DEFAULT 'ARC-TESTNET',
       wallet_set_id TEXT NOT NULL,
       created_at INTEGER
     );

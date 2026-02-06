@@ -125,7 +125,7 @@ export async function getWalletBalances(walletId: string): Promise<TokenBalance[
   const circleClient = getCircleClient();
 
   try {
-    const response = await circleClient.getWalletTokenBalance({ id: walletId });
+    const response = await circleClient.getWalletTokenBalance({ id: walletId, includeAll: true, pageSize: 10 });
 
     if (!response.data?.tokenBalances) {
       return [];
@@ -133,8 +133,8 @@ export async function getWalletBalances(walletId: string): Promise<TokenBalance[
 
     return response.data.tokenBalances as TokenBalance[];
   } catch (error) {
-    logger.error({ walletId, error }, "Failed to get wallet balances");
-    return [];
+    logger.warn({ walletId, error: (error as Error).message }, "Circle balance query failed (expected on Arc testnet)");
+    throw error;
   }
 }
 

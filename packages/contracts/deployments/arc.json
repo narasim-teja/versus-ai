@@ -1,0 +1,36 @@
+{
+  "network": "arc",
+  "chainId": 5042002,
+  "deployer": "0x838fDad90E28DE95DAB994EA4b4d526972610985",
+  "timestamp": "2025-02-04T00:00:00.000Z",
+  "contracts": {
+    "usdc": "0x3600000000000000000000000000000000000000",
+    "revenueDistributor": "0xFb9499118e785EC41Fd0361C80031df1aaa7e579",
+    "lendingPool": "0xF6D8013c2C11f8895118A01a44df52dce143daE6",
+    "creatorFactory": "0x3DAe7840cC5ACf75548a430651af921a29EF744D"
+  },
+  "parameters": {
+    "defaultFloor": "10000",
+    "defaultCeiling": "10000000",
+    "defaultMidpoint": "10000000000000000000000",
+    "defaultSteepness": "10000000000000000"
+  },
+  "creators": {
+    "alice": {
+      "name": "Agent Alice",
+      "symbol": "ALICE",
+      "wallet": "0x838fDad90E28DE95DAB994EA4b4d526972610985",
+      "token": "0xC2061D6a3c6df9Dd2dD9947e58cD146e6bDC55Dc",
+      "bondingCurve": "0x521f67CB4f410b4DD13B0E95eb30C3aAF9a641ee",
+      "createdAt": 1770359773
+    },
+    "bob": {
+      "name": "Agent Bob",
+      "symbol": "BOB",
+      "wallet": "0x0000000000000000000000000000000000000002",
+      "token": "0xc2149175e044c2fA7654C40B20d29253E859E699",
+      "bondingCurve": "0x31508a1dc0bb348A317396e3F44431b549EDCEdd",
+      "createdAt": 1770359777
+    }
+  }
+}
