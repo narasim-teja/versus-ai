@@ -18,6 +18,7 @@
     "viem": "^2.21.0",
     "drizzle-orm": "^0.33.0",
     "@circle-fin/developer-controlled-wallets": "^9.4.0",
+    "@circle-fin/user-controlled-wallets": "^10.1.0",
     "zod": "^3.23.0",
     "pino": "^9.0.0",
     "pino-pretty": "^11.0.0",

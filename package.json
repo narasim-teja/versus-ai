@@ -16,6 +16,7 @@
     "node": ">=18"
   },
   "dependencies": {
+    "@circle-fin/user-controlled-wallets": "^10.1.0",
     "@erc7824/nitrolite": "^0.5.3"
   }
 }
