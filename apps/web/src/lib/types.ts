@@ -194,3 +194,70 @@ export interface Portfolio {
   holdings: PortfolioHolding[];
   totalValue: string;
 }
+
+// ============================================
+// Video Types
+// ============================================
+
+export interface Video {
+  id: string;
+  title: string;
+  description: string | null;
+  status: "pending" | "processing" | "ready" | "error";
+  durationSeconds: number | null;
+  totalSegments: number | null;
+  quality: string | null;
+  contentUri: string | null;
+  thumbnailUri: string | null;
+  agentId: string | null;
+  createdAt: number;
+  processedAt: number | null;
+}
+
+export interface VideoDetail extends Video {
+  merkleRoot: string | null;
+}
+
+/** Response from POST /api/videos/:videoId/session (legacy path) */
+export interface LegacySession {
+  type: "legacy";
+  sessionId: string;
+  videoId: string;
+  expiresAt: number;
+}
+
+/** Response from POST /api/videos/:videoId/session (Yellow path) */
+export interface YellowSession {
+  type: "yellow";
+  appSessionId: string;
+  videoId: string;
+  pricePerSegment: string;
+  viewerBalance: string;
+  totalDeposited: string;
+  asset: string;
+}
+
+export type ViewingSession = LegacySession | YellowSession;
+
+/** Response from GET /api/videos/:videoId/session/:sessionId/status */
+export interface SessionStatus {
+  appSessionId: string;
+  videoId: string;
+  status: "active" | "closed" | "settled";
+  viewerBalance: string;
+  creatorBalance: string;
+  totalDeposited: string;
+  segmentsDelivered: number;
+  secondsWatched: number;
+  pricePerSegment: string;
+  asset?: string;
+  closedAt?: number;
+}
+
+/** Response from POST /api/videos/:videoId/session/:sessionId/close */
+export interface SessionCloseResult {
+  closed: boolean;
+  totalPaid: string;
+  settled: boolean;
+  segmentsDelivered: number;
+}

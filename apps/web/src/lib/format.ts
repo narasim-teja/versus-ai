@@ -102,3 +102,17 @@ export function truncateAddress(address: string, chars = 4): string {
   if (address.length <= chars * 2 + 2) return address;
   return `${address.slice(0, chars + 2)}...${address.slice(-chars)}`;
 }
+
+/**
+ * Format seconds to mm:ss or hh:mm:ss display.
+ * e.g. 125 -> "2:05", 3661 -> "1:01:01"
+ */
+export function formatDuration(seconds: number | null | undefined): string {
+  if (!seconds || seconds <= 0) return "0:00";
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  if (h > 0) return `${h}:${pad(m)}:${pad(s)}`;
+  return `${m}:${pad(s)}`;
+}

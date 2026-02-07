@@ -7,6 +7,11 @@ import type {
   TokenPrice,
   TradeQuote,
   Portfolio,
+  Video,
+  VideoDetail,
+  ViewingSession,
+  SessionStatus,
+  SessionCloseResult,
 } from "./types";
 
 async function fetchJson<T>(path: string, options?: RequestInit): Promise<T> {
@@ -95,4 +100,70 @@ export async function fetchAllowance(
     `/api/trading/allowance?${params}`
   );
   return data.allowance;
+}
+
+// ── Video APIs ──────────────────────────────────
+
+export async function fetchVideos(): Promise<Video[]> {
+  const data = await fetchJson<{ videos: Video[] }>("/api/videos");
+  return data.videos;
+}
+
+export async function fetchVideo(id: string): Promise<VideoDetail> {
+  const data = await fetchJson<{ video: VideoDetail }>(`/api/videos/${id}`);
+  return data.video;
+}
+
+/**
+ * Create a viewing session. Attempts Yellow path if wallet address and
+ * deposit are provided, otherwise falls back to legacy bearer token.
+ */
+export async function createViewingSession(
+  videoId: string,
+  viewerAddress?: string,
+  depositAmount?: string
+): Promise<ViewingSession> {
+  if (viewerAddress && depositAmount) {
+    const data = await fetchJson<{
+      appSessionId: string;
+      videoId: string;
+      pricePerSegment: string;
+      viewerBalance: string;
+      totalDeposited: string;
+      asset: string;
+    }>(`/api/videos/${videoId}/session`, {
+      method: "POST",
+      body: JSON.stringify({ viewerAddress, depositAmount }),
+    });
+    return { type: "yellow", ...data };
+  }
+
+  const data = await fetchJson<{
+    sessionId: string;
+    videoId: string;
+    expiresAt: number;
+  }>(`/api/videos/${videoId}/session`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+  return { type: "legacy", ...data };
+}
+
+export async function fetchSessionStatus(
+  videoId: string,
+  sessionId: string
+): Promise<SessionStatus> {
+  return fetchJson<SessionStatus>(
+    `/api/videos/${videoId}/session/${sessionId}/status`
+  );
+}
+
+export async function closeSession(
+  videoId: string,
+  sessionId: string
+): Promise<SessionCloseResult> {
+  return fetchJson<SessionCloseResult>(
+    `/api/videos/${videoId}/session/${sessionId}/close`,
+    { method: "POST" }
+  );
 }
