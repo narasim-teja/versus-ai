@@ -5,7 +5,7 @@
  * Falls back to rule-based decide() if OpenRouter is not configured or fails.
  */
 
-import type { Address } from "viem";
+import { getAddress, type Address } from "viem";
 import { logger } from "../../utils/logger";
 import {
   chatCompletion,
@@ -246,8 +246,8 @@ function parseActionParams(
     switch (type) {
       case "BUY_TOKEN":
         return {
-          tokenAddress: String(raw.tokenAddress) as Address,
-          bondingCurveAddress: String(raw.bondingCurveAddress) as Address,
+          tokenAddress: getAddress(String(raw.tokenAddress)),
+          bondingCurveAddress: getAddress(String(raw.bondingCurveAddress)),
           tokenName: String(raw.tokenName || "Unknown"),
           usdcAmount: BigInt(String(raw.usdcAmount || "0")),
           minTokensOut: BigInt(String(raw.minTokensOut || "0")),
@@ -255,8 +255,8 @@ function parseActionParams(
 
       case "SELL_TOKEN":
         return {
-          tokenAddress: String(raw.tokenAddress) as Address,
-          bondingCurveAddress: String(raw.bondingCurveAddress) as Address,
+          tokenAddress: getAddress(String(raw.tokenAddress)),
+          bondingCurveAddress: getAddress(String(raw.bondingCurveAddress)),
           tokenName: String(raw.tokenName || "Unknown"),
           tokenAmount: BigInt(String(raw.tokenAmount || "0")),
           minUsdcOut: BigInt(String(raw.minUsdcOut || "0")),
@@ -264,7 +264,7 @@ function parseActionParams(
 
       case "BORROW":
         return {
-          collateralToken: String(raw.collateralToken) as Address,
+          collateralToken: getAddress(String(raw.collateralToken)),
           collateralAmount: BigInt(String(raw.collateralAmount || "0")),
           borrowAmount: BigInt(String(raw.borrowAmount || "0")),
         } satisfies BorrowParams;
@@ -277,12 +277,12 @@ function parseActionParams(
 
       case "CLAIM_REVENUE":
         return {
-          bondingCurveAddress: String(raw.bondingCurveAddress) as Address,
+          bondingCurveAddress: getAddress(String(raw.bondingCurveAddress)),
         } satisfies ClaimRevenueParams;
 
       case "DEPOSIT_COLLATERAL":
         return {
-          tokenAddress: String(raw.tokenAddress) as Address,
+          tokenAddress: getAddress(String(raw.tokenAddress)),
           amount: BigInt(String(raw.amount || "0")),
         } satisfies DepositCollateralParams;
 

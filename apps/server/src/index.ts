@@ -15,7 +15,7 @@ import { logger as honoLogger } from "hono/logger";
 import { env } from "./utils/env";
 import { logger } from "./utils/logger";
 import { initializeDatabase } from "./db/client";
-import { healthRoutes, agentRoutes, agentsWebsocket, videoRoutes, streamingRoutes, authRoutes } from "./api/routes";
+import { healthRoutes, agentRoutes, agentsWebsocket, videoRoutes, streamingRoutes, authRoutes, tradingRoutes } from "./api/routes";
 import { createAllAgentConfigs, startAllAgents, stopAllAgents } from "./agents";
 import { initializeAgentWallets } from "./agents/init";
 import {
@@ -47,6 +47,7 @@ app.route("/api/agents", agentRoutes);
 app.route("/api/videos", videoRoutes);
 app.route("/api/videos", streamingRoutes);
 app.route("/api/auth", authRoutes);
+app.route("/api/trading", tradingRoutes);
 
 // Root endpoint
 app.get("/", (c) => {

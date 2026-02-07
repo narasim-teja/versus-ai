@@ -71,7 +71,7 @@ export async function initializeUserWallet(
 
   const response = await client.createUserPinWithWallets({
     userId,
-    blockchains: ["ETH-SEPOLIA"],
+    blockchains: ["ARC-TESTNET"],
     idempotencyKey: randomUUID(),
   });
 
@@ -82,6 +82,55 @@ export async function initializeUserWallet(
   }
 
   logger.info({ userId, challengeId }, "Initialized user wallet challenge");
+  return { challengeId };
+}
+
+/**
+ * Create a contract execution challenge for a viewer wallet.
+ * Returns a challengeId that must be executed on the client-side SDK.
+ */
+export async function createContractExecutionChallenge(params: {
+  userId: string;
+  walletId: string;
+  contractAddress: string;
+  abiFunctionSignature: string;
+  abiParameters: Array<string | number | boolean>;
+  refId?: string;
+}): Promise<{ challengeId: string }> {
+  const client = getUserWalletClient();
+
+  const response = await client.createUserTransactionContractExecutionChallenge({
+    userId: params.userId,
+    walletId: params.walletId,
+    contractAddress: params.contractAddress,
+    abiFunctionSignature: params.abiFunctionSignature,
+    abiParameters: params.abiParameters,
+    fee: {
+      type: "level",
+      config: {
+        feeLevel: "MEDIUM",
+      },
+    },
+    refId: params.refId,
+    idempotencyKey: randomUUID(),
+  });
+
+  const challengeId = response.data?.challengeId;
+
+  if (!challengeId) {
+    throw new Error("Failed to create contract execution challenge");
+  }
+
+  logger.info(
+    {
+      userId: params.userId,
+      challengeId,
+      contractAddress: params.contractAddress,
+      fn: params.abiFunctionSignature,
+    },
+    "Created contract execution challenge"
+  );
+
   return { challengeId };
 }
 

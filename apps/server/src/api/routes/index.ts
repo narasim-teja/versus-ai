@@ -9,3 +9,4 @@ export { default as agentRoutes, agentsWebsocket } from "./agents";
 export { default as videoRoutes } from "./videos";
 export { default as streamingRoutes } from "./streaming";
 export { default as authRoutes } from "./auth";
+export { default as tradingRoutes } from "./trading";

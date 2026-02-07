@@ -83,6 +83,18 @@ export function formatTimeAgo(timestamp: number): string {
 }
 
 /**
+ * Format a token balance (18 decimals) to readable display.
+ * e.g. "1500000000000000000" → "1.50"
+ */
+export function formatTokenBalance(value: string): string {
+  if (!value || value === "0") return "0.00";
+  const num = Number(value) / 1e18;
+  if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(2)}M`;
+  if (num >= 1_000) return `${(num / 1_000).toFixed(2)}K`;
+  return num.toFixed(2);
+}
+
+/**
  * Truncate an address: "0x1234...5678"
  */
 export function truncateAddress(address: string, chars = 4): string {

@@ -155,3 +155,42 @@ export interface HealthResponse {
   integrations: IntegrationStatus[];
   agents: { total: number; running: number };
 }
+
+// ============================================
+// Trading Types
+// ============================================
+
+export interface TokenPrice {
+  agentId: string;
+  agentName: string;
+  tokenAddress: string;
+  bondingCurveAddress: string;
+  price: string;
+  floorPrice: string;
+  ceiling: string;
+  reserveBalance: string;
+  totalSupply: string;
+}
+
+export interface TradeQuote {
+  side: "buy" | "sell";
+  amountIn: string;
+  amountOut: string;
+  currentPrice: string;
+}
+
+export interface PortfolioHolding {
+  agentId: string;
+  agentName: string;
+  tokenAddress: string;
+  balance: string;
+  price: string;
+  value: string;
+}
+
+export interface Portfolio {
+  address: string;
+  usdcBalance: string;
+  holdings: PortfolioHolding[];
+  totalValue: string;
+}

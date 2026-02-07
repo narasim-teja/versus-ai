@@ -2,15 +2,19 @@
 
 import { Header } from "@/components/layout/Header";
 import { useAgents } from "@/hooks/useAgents";
+import { useTokenPrices } from "@/hooks/useTokenPrices";
 import { AgentCard } from "@/components/dashboard/AgentCard";
 import { AgentCardSkeleton } from "@/components/dashboard/AgentCardSkeleton";
 import { HealthIndicator } from "@/components/dashboard/HealthIndicator";
 import { AgentDecisionPanel } from "@/components/decisions/AgentDecisionPanel";
+import { TokenTradingCard } from "@/components/trading/TokenTradingCard";
+import { PortfolioPanel } from "@/components/trading/PortfolioPanel";
 import { Button } from "@/components/ui/Button";
 import { AlertCircle } from "lucide-react";
 
 export default function DashboardPage() {
   const { agents, isLoading, error, refetch } = useAgents();
+  const { prices } = useTokenPrices();
 
   return (
     <div className="min-h-screen bg-background">
@@ -49,6 +53,32 @@ export default function DashboardPage() {
             agents.map((agent) => <AgentCard key={agent.id} agent={agent} />)
           )}
         </div>
+
+        {/* Trade Tokens Section */}
+        {!isLoading && agents.length > 0 && (
+          <div className="mt-8">
+            <h2 className="mb-4 text-xl font-semibold tracking-tight">
+              Trade Tokens
+            </h2>
+            <div className="grid gap-6 md:grid-cols-3">
+              {agents.map((agent) => {
+                const priceData = prices.find((p) => p.agentId === agent.id);
+                return (
+                  <TokenTradingCard
+                    key={agent.id}
+                    agentId={agent.id}
+                    agentName={agent.name}
+                    tokenAddress={agent.tokenAddress}
+                    bondingCurveAddress={agent.bondingCurveAddress}
+                    price={priceData?.price ?? "0"}
+                    totalSupply={priceData?.totalSupply ?? "0"}
+                  />
+                );
+              })}
+              <PortfolioPanel />
+            </div>
+          </div>
+        )}
 
         {/* Real-time Decision Feeds */}
         {!isLoading && agents.length > 0 && (

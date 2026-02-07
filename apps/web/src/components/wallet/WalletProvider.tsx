@@ -7,11 +7,13 @@ import type { WalletStatus } from "@/hooks/useCircleWallet";
 interface WalletContextValue {
   status: WalletStatus;
   userId: string | null;
+  walletId: string | null;
   walletAddress: string | null;
   error: string | null;
   isConnected: boolean;
   connectWallet: () => Promise<void>;
   disconnect: () => void;
+  executeTradingChallenge: (challengeId: string) => Promise<void>;
 }
 
 const WalletContext = createContext<WalletContextValue | null>(null);

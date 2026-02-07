@@ -15,6 +15,7 @@ export type WalletStatus =
 interface WalletState {
   status: WalletStatus;
   userId: string | null;
+  walletId: string | null;
   walletAddress: string | null;
   error: string | null;
 }
@@ -25,6 +26,7 @@ export function useCircleWallet() {
   const [state, setState] = useState<WalletState>({
     status: "disconnected",
     userId: null,
+    walletId: null,
     walletAddress: null,
     error: null,
   });
@@ -39,6 +41,7 @@ export function useCircleWallet() {
           setState({
             status: "connected",
             userId: data.userId,
+            walletId: data.walletId ?? null,
             walletAddress: data.walletAddress,
             error: null,
           });
@@ -88,11 +91,11 @@ export function useCircleWallet() {
       setState((s) => ({ ...s, status: "setting_pin" }));
       await executeChallenge(challengeId);
 
-      // Step 6: Get wallet address (retry since Circle needs time to provision)
+      // Step 6: Get wallet address and ID (retry since Circle needs time to provision)
       let walletAddress: string | null = null;
+      let walletId: string | null = null;
       const maxRetries = 5;
       for (let attempt = 0; attempt < maxRetries; attempt++) {
-        // Wait before fetching (increasing delay: 2s, 4s, 6s, 8s, 10s)
         await new Promise((r) => setTimeout(r, (attempt + 1) * 2000));
 
         const walletsRes = await fetch(
@@ -103,8 +106,10 @@ export function useCircleWallet() {
           continue;
         }
         const { wallets } = await walletsRes.json();
-        walletAddress = wallets?.[0]?.address ?? null;
-        if (walletAddress) break;
+        const wallet = wallets?.[0];
+        walletAddress = wallet?.address ?? null;
+        walletId = wallet?.id ?? null;
+        if (walletAddress && walletId) break;
         console.warn(`Wallet fetch attempt ${attempt + 1}: no wallets yet`);
       }
 
@@ -115,12 +120,13 @@ export function useCircleWallet() {
       // Persist to localStorage
       localStorage.setItem(
         STORAGE_KEY,
-        JSON.stringify({ userId, walletAddress })
+        JSON.stringify({ userId, walletId, walletAddress })
       );
 
       setState({
         status: "connected",
         userId,
+        walletId,
         walletAddress,
         error: null,
       });
@@ -134,11 +140,38 @@ export function useCircleWallet() {
     }
   }, []);
 
+  /**
+   * Execute a Circle challenge (used for trade approvals).
+   * Re-initializes the SDK with a fresh token before executing.
+   */
+  const executeTradingChallenge = useCallback(
+    async (challengeId: string) => {
+      if (!state.userId) throw new Error("Not connected");
+
+      // Get fresh session token
+      const tokenRes = await fetch(`${config.apiBaseUrl}/api/auth/token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: state.userId }),
+      });
+      if (!tokenRes.ok) throw new Error("Failed to refresh session");
+      const { userToken, encryptionKey } = await tokenRes.json();
+
+      // Re-initialize SDK with fresh token
+      initCircleSdk(userToken, encryptionKey);
+
+      // Execute the challenge
+      await executeChallenge(challengeId);
+    },
+    [state.userId]
+  );
+
   const disconnect = useCallback(() => {
     localStorage.removeItem(STORAGE_KEY);
     setState({
       status: "disconnected",
       userId: null,
+      walletId: null,
       walletAddress: null,
       error: null,
     });
@@ -148,6 +181,7 @@ export function useCircleWallet() {
     ...state,
     connectWallet,
     disconnect,
+    executeTradingChallenge,
     isConnected: state.status === "connected",
   };
 }

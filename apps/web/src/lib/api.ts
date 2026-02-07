@@ -4,6 +4,9 @@ import type {
   AgentDetail,
   DecisionLog,
   HealthResponse,
+  TokenPrice,
+  TradeQuote,
+  Portfolio,
 } from "./types";
 
 async function fetchJson<T>(path: string, options?: RequestInit): Promise<T> {
@@ -48,4 +51,36 @@ export async function forceCycle(
 
 export async function fetchHealth(): Promise<HealthResponse> {
   return fetchJson<HealthResponse>("/health");
+}
+
+export async function fetchTokenPrices(): Promise<TokenPrice[]> {
+  const data = await fetchJson<{ prices: TokenPrice[] }>("/api/trading/prices");
+  return data.prices;
+}
+
+export async function fetchTradeQuote(
+  bondingCurveAddress: string,
+  side: "buy" | "sell",
+  amount: string
+): Promise<TradeQuote> {
+  return fetchJson<TradeQuote>(
+    `/api/trading/quote?bondingCurveAddress=${bondingCurveAddress}&side=${side}&amount=${amount}`
+  );
+}
+
+export async function fetchPortfolio(address: string): Promise<Portfolio> {
+  return fetchJson<Portfolio>(`/api/trading/portfolio/${address}`);
+}
+
+export async function executeTradeAction(body: {
+  userId: string;
+  walletId: string;
+  action: "approve_usdc" | "approve_token" | "buy" | "sell";
+  contractAddress: string;
+  params: Record<string, string>;
+}): Promise<{ challengeId: string }> {
+  return fetchJson<{ challengeId: string }>("/api/trading/execute", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
 }
