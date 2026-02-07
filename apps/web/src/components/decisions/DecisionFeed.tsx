@@ -43,8 +43,8 @@ export function DecisionFeed({
             </div>
           ) : (
             <div className="space-y-2">
-              {decisions.map((decision) => (
-                <DecisionEntry key={decision.id} decision={decision} />
+              {decisions.map((decision, index) => (
+                <DecisionEntry key={`${decision.agentId}-${decision.id}-${index}`} decision={decision} />
               ))}
             </div>
           )}

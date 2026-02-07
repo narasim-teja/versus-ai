@@ -69,7 +69,24 @@ export function ConnectWalletButton() {
     );
   }
 
-  // Disconnected / error state
+  // Error state
+  if (status === "error") {
+    return (
+      <div className="flex items-center gap-1">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={connectWallet}
+          className="border-red-500/50 text-red-400 hover:text-red-300"
+        >
+          <Wallet className="h-3.5 w-3.5" />
+          Retry
+        </Button>
+      </div>
+    );
+  }
+
+  // Disconnected state
   return (
     <Button variant="outline" size="sm" onClick={connectWallet}>
       <Wallet className="h-3.5 w-3.5" />

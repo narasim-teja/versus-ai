@@ -88,14 +88,29 @@ export function useCircleWallet() {
       setState((s) => ({ ...s, status: "setting_pin" }));
       await executeChallenge(challengeId);
 
-      // Step 6: Get wallet address
-      const walletsRes = await fetch(
-        `${config.apiBaseUrl}/api/auth/user/${userId}/wallets`
-      );
-      if (!walletsRes.ok) throw new Error("Failed to fetch wallets");
-      const { wallets } = await walletsRes.json();
+      // Step 6: Get wallet address (retry since Circle needs time to provision)
+      let walletAddress: string | null = null;
+      const maxRetries = 5;
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
+        // Wait before fetching (increasing delay: 2s, 4s, 6s, 8s, 10s)
+        await new Promise((r) => setTimeout(r, (attempt + 1) * 2000));
 
-      const walletAddress = wallets?.[0]?.address ?? null;
+        const walletsRes = await fetch(
+          `${config.apiBaseUrl}/api/auth/user/${userId}/wallets`
+        );
+        if (!walletsRes.ok) {
+          console.warn(`Wallet fetch attempt ${attempt + 1} failed:`, walletsRes.status);
+          continue;
+        }
+        const { wallets } = await walletsRes.json();
+        walletAddress = wallets?.[0]?.address ?? null;
+        if (walletAddress) break;
+        console.warn(`Wallet fetch attempt ${attempt + 1}: no wallets yet`);
+      }
+
+      if (!walletAddress) {
+        throw new Error("Wallet created but address not yet available. Try reconnecting.");
+      }
 
       // Persist to localStorage
       localStorage.setItem(
@@ -110,6 +125,7 @@ export function useCircleWallet() {
         error: null,
       });
     } catch (err) {
+      console.error("[CircleWallet] Connection failed:", err);
       setState((s) => ({
         ...s,
         status: "error",
