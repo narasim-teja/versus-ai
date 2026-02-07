@@ -22,6 +22,11 @@ import {
   watchBondingCurveEvents,
   watchCreatorFactory,
 } from "./integrations/chain/events";
+import {
+  isYellowConfigured,
+  getYellowClient,
+  disconnectYellow,
+} from "./integrations/yellow";
 import type { Address } from "viem";
 
 // Create Hono app
@@ -31,7 +36,7 @@ const app = new Hono();
 app.use("*", cors({
   origin: env.FRONTEND_URL || "*",
   allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowHeaders: ["Content-Type", "Authorization"],
+  allowHeaders: ["Content-Type", "Authorization", "X-Yellow-Session"],
 }));
 
 app.use("*", honoLogger());
@@ -60,6 +65,8 @@ app.get("/", (c) => {
       videoStream: "/api/videos/:videoId/master.m3u8",
       videoKey: "/api/videos/:videoId/key/:segment",
       videoSession: "/api/videos/:videoId/session",
+      sessionClose: "/api/videos/:videoId/session/:sessionId/close",
+      sessionStatus: "/api/videos/:videoId/session/:sessionId/status",
     },
   });
 });
@@ -87,7 +94,9 @@ function setupShutdownHandler() {
     for (const unwatch of eventUnwatchers) {
       unwatch();
     }
-    logger.info("Agents and event watchers stopped, exiting...");
+    // Disconnect Yellow Network
+    disconnectYellow();
+    logger.info("Agents, event watchers, and Yellow stopped, exiting...");
     process.exit(0);
   };
 
@@ -134,6 +143,18 @@ async function main() {
         "Applied Circle wallet to agent config"
       );
     }
+  }
+
+  // Initialize Yellow Network if configured
+  if (isYellowConfigured()) {
+    try {
+      await getYellowClient();
+      logger.info("Yellow Network ClearNode connected and authenticated");
+    } catch (err) {
+      logger.warn({ err }, "Yellow Network initialization failed (non-fatal, will retry on first use)");
+    }
+  } else {
+    logger.info("Yellow Network not configured, using legacy bearer auth for streaming");
   }
 
   // Start agents (30 second cycle interval)

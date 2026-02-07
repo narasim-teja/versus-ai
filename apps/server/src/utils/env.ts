@@ -32,6 +32,12 @@ const envSchema = z.object({
   OPENROUTER_API_KEY: z.string().min(1).optional(),
   OPENROUTER_MODEL: z.string().default("anthropic/claude-sonnet-4-5-20250929"),
 
+  // Yellow Network (state channel payments - optional, falls back to bearer auth)
+  YELLOW_CLEARNODE_URL: z.string().url().default("wss://clearnet-sandbox.yellow.com/ws"),
+  YELLOW_SERVER_PRIVATE_KEY: z.string().startsWith("0x").optional(),
+  YELLOW_ASSET: z.string().default("ytest.usd"),
+  YELLOW_PRICE_PER_SEGMENT: z.string().default("0.01"),
+
   // Supabase (video storage)
   SUPABASE_URL: z.string().url().optional(),
   SUPABASE_SERVICE_KEY: z.string().min(1).optional(),

@@ -23,6 +23,7 @@
     "pino-pretty": "^11.0.0",
     "better-sqlite3": "^11.0.0",
     "@versus/streaming": "workspace:*",
+    "@erc7824/nitrolite": "latest",
     "fluent-ffmpeg": "^2.1.3",
     "@supabase/supabase-js": "^2.49.1"
   },

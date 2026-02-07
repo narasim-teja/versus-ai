@@ -171,6 +171,35 @@ export const viewerSessionsRelations = relations(viewerSessions, ({ one }) => ({
   }),
 }));
 
+/**
+ * Yellow sessions - state channel payment sessions for pay-per-second streaming
+ */
+export const yellowSessions = sqliteTable("yellow_sessions", {
+  id: text("id").primaryKey(), // app_session_id from Yellow ClearNode
+  videoId: text("video_id")
+    .notNull()
+    .references(() => videos.id),
+  viewerAddress: text("viewer_address").notNull(),
+  creatorAddress: text("creator_address").notNull(),
+  serverAddress: text("server_address").notNull(),
+  totalDeposited: text("total_deposited").notNull(),
+  viewerBalance: text("viewer_balance").notNull(),
+  creatorBalance: text("creator_balance").notNull(),
+  segmentsDelivered: integer("segments_delivered").default(0),
+  pricePerSegment: text("price_per_segment").notNull(),
+  status: text("status").notNull().default("active"), // active | closed | settled
+  settlementTxHash: text("settlement_tx_hash"),
+  createdAt: integer("created_at").$defaultFn(() => Date.now()),
+  closedAt: integer("closed_at"),
+});
+
+export const yellowSessionsRelations = relations(yellowSessions, ({ one }) => ({
+  video: one(videos, {
+    fields: [yellowSessions.videoId],
+    references: [videos.id],
+  }),
+}));
+
 // Type exports
 export type Agent = typeof agents.$inferSelect;
 export type NewAgent = typeof agents.$inferInsert;
@@ -184,3 +213,5 @@ export type Video = typeof videos.$inferSelect;
 export type NewVideo = typeof videos.$inferInsert;
 export type ViewerSession = typeof viewerSessions.$inferSelect;
 export type NewViewerSession = typeof viewerSessions.$inferInsert;
+export type YellowSession = typeof yellowSessions.$inferSelect;
+export type NewYellowSession = typeof yellowSessions.$inferInsert;

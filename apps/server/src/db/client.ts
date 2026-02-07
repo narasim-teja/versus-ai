@@ -126,6 +126,27 @@ export function initializeDatabase() {
     CREATE INDEX IF NOT EXISTS idx_videos_status ON videos(status);
     CREATE INDEX IF NOT EXISTS idx_viewer_sessions_video_id ON viewer_sessions(video_id);
     CREATE INDEX IF NOT EXISTS idx_viewer_sessions_expires ON viewer_sessions(expires_at);
+
+    CREATE TABLE IF NOT EXISTS yellow_sessions (
+      id TEXT PRIMARY KEY,
+      video_id TEXT NOT NULL REFERENCES videos(id),
+      viewer_address TEXT NOT NULL,
+      creator_address TEXT NOT NULL,
+      server_address TEXT NOT NULL,
+      total_deposited TEXT NOT NULL,
+      viewer_balance TEXT NOT NULL,
+      creator_balance TEXT NOT NULL,
+      segments_delivered INTEGER DEFAULT 0,
+      price_per_segment TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active',
+      settlement_tx_hash TEXT,
+      created_at INTEGER,
+      closed_at INTEGER
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_yellow_sessions_video ON yellow_sessions(video_id);
+    CREATE INDEX IF NOT EXISTS idx_yellow_sessions_viewer ON yellow_sessions(viewer_address);
+    CREATE INDEX IF NOT EXISTS idx_yellow_sessions_status ON yellow_sessions(status);
   `);
 
   logger.info("Database tables initialized");
