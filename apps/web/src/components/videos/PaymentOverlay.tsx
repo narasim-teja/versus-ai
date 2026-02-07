@@ -1,6 +1,6 @@
 "use client";
 
-import { DollarSign, Zap, Clock, Film } from "lucide-react";
+import { DollarSign, Zap, Clock, Film, Wallet } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import type { ViewingSession, SessionStatus } from "@/lib/types";
@@ -12,6 +12,12 @@ interface PaymentOverlayProps {
   sessionState: SessionState;
   sessionStatus: SessionStatus | null;
   onClose: () => void;
+  ephemeralAddress?: string | null;
+  isStateChanelSession?: boolean;
+}
+
+function truncateAddress(address: string): string {
+  return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }
 
 export function PaymentOverlay({
@@ -19,6 +25,8 @@ export function PaymentOverlay({
   sessionState,
   sessionStatus,
   onClose,
+  ephemeralAddress,
+  isStateChanelSession,
 }: PaymentOverlayProps) {
   if (!session) return null;
 
@@ -38,8 +46,23 @@ export function PaymentOverlay({
             }
           >
             <Zap className="mr-1 h-3 w-3" />
-            {isYellow ? "Yellow Network" : "Legacy Session"}
+            {isStateChanelSession
+              ? "State Channel"
+              : isYellow
+                ? "Yellow Network"
+                : "Legacy Session"}
           </Badge>
+
+          {/* Ephemeral address (state channel only) */}
+          {isStateChanelSession && ephemeralAddress && (
+            <Badge
+              variant="outline"
+              className="border-purple-500/30 bg-purple-500/10 text-purple-400"
+            >
+              <Wallet className="mr-1 h-3 w-3" />
+              {truncateAddress(ephemeralAddress)}
+            </Badge>
+          )}
 
           {/* Balance (Yellow only) */}
           {isYellow && sessionStatus && (

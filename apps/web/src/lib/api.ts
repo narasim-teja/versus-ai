@@ -127,6 +127,7 @@ export async function createViewingSession(
     const data = await fetchJson<{
       appSessionId: string;
       videoId: string;
+      serverAddress: string;
       pricePerSegment: string;
       viewerBalance: string;
       totalDeposited: string;
@@ -166,4 +167,32 @@ export async function closeSession(
     `/api/videos/${videoId}/session/${sessionId}/close`,
     { method: "POST" }
   );
+}
+
+/**
+ * Co-sign a state update and get the raw AES decryption key.
+ * Returns ArrayBuffer (16-byte key) instead of JSON.
+ */
+export async function cosignAndGetKey(
+  videoId: string,
+  body: {
+    appSessionId: string;
+    segmentIndex: number;
+    version: number;
+    signedMessage: string;
+  }
+): Promise<ArrayBuffer> {
+  const res = await fetch(
+    `${config.apiBaseUrl}/api/videos/${videoId}/cosign`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }
+  );
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Cosign ${res.status}: ${text}`);
+  }
+  return res.arrayBuffer();
 }

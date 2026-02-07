@@ -231,6 +231,7 @@ export interface YellowSession {
   type: "yellow";
   appSessionId: string;
   videoId: string;
+  serverAddress: string;
   pricePerSegment: string;
   viewerBalance: string;
   totalDeposited: string;

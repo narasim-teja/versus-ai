@@ -6,7 +6,7 @@
 
 import { Hono } from "hono";
 import { db } from "../../db/client";
-import { videos } from "../../db/schema";
+import { videos, agents } from "../../db/schema";
 import { eq, desc } from "drizzle-orm";
 import { processVideo } from "../../video/processor";
 import { getStorageProvider, isSupabaseConfigured } from "../../integrations/supabase";
@@ -193,6 +193,150 @@ videoRoutes.post("/upload", async (c) => {
     logger.error(
       { error: error instanceof Error ? error.message : "Unknown error" },
       "Video upload failed"
+    );
+    return c.json(
+      {
+        error: "Video processing failed",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
+      500
+    );
+  }
+});
+
+/**
+ * POST /api/videos/agent-upload - Agent auto-upload via URL
+ *
+ * Accepts JSON body:
+ * - agentId: The creator agent ID (must exist in agents table)
+ * - title: Video title
+ * - description: (optional) Video description
+ * - videoUrl: URL to fetch the video from
+ *
+ * Fetches the video, runs it through the full processing pipeline,
+ * and stores it linked to the agent.
+ */
+videoRoutes.post("/agent-upload", async (c) => {
+  if (!isSupabaseConfigured()) {
+    return c.json(
+      { error: "Supabase storage not configured. Set SUPABASE_URL and SUPABASE_SERVICE_KEY." },
+      503
+    );
+  }
+
+  let body: {
+    agentId: string;
+    title: string;
+    description?: string;
+    videoUrl: string;
+  };
+
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON body" }, 400);
+  }
+
+  const { agentId, title, description, videoUrl } = body;
+
+  if (!agentId || !title || !videoUrl) {
+    return c.json(
+      { error: "Missing required fields: agentId, title, videoUrl" },
+      400
+    );
+  }
+
+  // Validate agent exists
+  const agent = await db
+    .select({ id: agents.id, name: agents.name })
+    .from(agents)
+    .where(eq(agents.id, agentId))
+    .limit(1);
+
+  if (agent.length === 0) {
+    return c.json({ error: `Agent not found: ${agentId}` }, 404);
+  }
+
+  try {
+    logger.info(
+      { agentId, title, videoUrl },
+      "Agent auto-upload: fetching video"
+    );
+
+    // Fetch video from URL
+    const videoResponse = await fetch(videoUrl);
+    if (!videoResponse.ok) {
+      return c.json(
+        { error: `Failed to fetch video: ${videoResponse.status} ${videoResponse.statusText}` },
+        400
+      );
+    }
+
+    const arrayBuffer = await videoResponse.arrayBuffer();
+    const videoBuffer = Buffer.from(arrayBuffer);
+
+    logger.info(
+      { agentId, title, size: videoBuffer.length },
+      "Agent auto-upload: video fetched, processing"
+    );
+
+    // Process through existing pipeline
+    const keyServerBaseUrl =
+      env.FRONTEND_URL || `http://localhost:${env.PORT}`;
+
+    const storage = getStorageProvider();
+    const result = await processVideo(videoBuffer, storage, {
+      segmentDuration: env.VIDEO_SEGMENT_DURATION,
+      quality: env.VIDEO_QUALITY as "480p" | "720p" | "1080p",
+      keyServerBaseUrl,
+    });
+
+    // Store in database linked to agent
+    await db.insert(videos).values({
+      id: result.videoId,
+      agentId,
+      title,
+      description: description || null,
+      status: "ready",
+      durationSeconds: result.durationSeconds,
+      totalSegments: result.totalSegments,
+      quality: result.quality,
+      masterSecret: result.masterSecret,
+      merkleRoot: result.merkleRoot,
+      merkleTreeData: result.merkleTreeData,
+      contentUri: result.contentUri,
+      processedAt: Date.now(),
+    });
+
+    logger.info(
+      {
+        videoId: result.videoId,
+        agentId,
+        totalSegments: result.totalSegments,
+        duration: result.durationSeconds,
+      },
+      "Agent auto-upload: video processed and stored"
+    );
+
+    return c.json({
+      video: {
+        id: result.videoId,
+        title,
+        description,
+        agentId,
+        agentName: agent[0].name,
+        status: "ready",
+        totalSegments: result.totalSegments,
+        durationSeconds: result.durationSeconds,
+        quality: result.quality,
+        contentUri: result.contentUri,
+        merkleRoot: result.merkleRoot,
+      },
+    });
+  } catch (error) {
+    logger.error(
+      { error: error instanceof Error ? error.message : "Unknown error", agentId, videoUrl },
+      "Agent auto-upload failed"
     );
     return c.json(
       {

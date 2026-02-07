@@ -18,6 +18,7 @@ import {
   isYellowConfigured,
   createStreamingSession,
   processSegmentPayment,
+  cosignAndSubmitPayment,
   closeStreamingSession,
   getSession,
 } from "../../integrations/yellow";
@@ -127,6 +128,7 @@ streamingRoutes.post("/:videoId/session", async (c) => {
       return c.json({
         appSessionId: session.appSessionId,
         videoId,
+        serverAddress: session.serverAddress,
         pricePerSegment: session.pricePerSegment,
         viewerBalance: session.viewerBalance,
         totalDeposited: session.totalDeposited,
@@ -278,6 +280,99 @@ streamingRoutes.get("/:videoId/key/:segment", async (c) => {
     },
     402,
   );
+});
+
+/**
+ * POST /api/videos/:videoId/cosign - Co-sign a viewer's state update and return AES key
+ *
+ * The viewer signs a state update on the frontend (deducting pricePerSegment),
+ * sends it here. Server validates, co-signs, submits to ClearNode,
+ * and returns the raw 16-byte AES key for the requested segment.
+ *
+ * Body: { appSessionId, segmentIndex, version, signedMessage }
+ * Returns: raw 16-byte AES key (application/octet-stream)
+ * Errors: 402 insufficient balance, 401 invalid session
+ */
+streamingRoutes.post("/:videoId/cosign", async (c) => {
+  const videoId = c.req.param("videoId");
+
+  let body: {
+    appSessionId: string;
+    segmentIndex: number;
+    version: number;
+    signedMessage: string;
+  };
+
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid request body" }, 400);
+  }
+
+  const { appSessionId, segmentIndex, version, signedMessage } = body;
+
+  if (!appSessionId || segmentIndex == null || !version || !signedMessage) {
+    return c.json(
+      { error: "Missing required fields: appSessionId, segmentIndex, version, signedMessage" },
+      400,
+    );
+  }
+
+  // Validate session exists and matches video
+  const session = getSession(appSessionId);
+  if (!session) {
+    return c.json({ error: "Invalid or expired session" }, 401);
+  }
+
+  if (session.videoId !== videoId) {
+    return c.json({ error: "Session does not match video" }, 403);
+  }
+
+  // Co-sign and submit to ClearNode
+  try {
+    const result = await cosignAndSubmitPayment(
+      appSessionId,
+      segmentIndex,
+      version,
+      signedMessage,
+    );
+
+    if (!result.success) {
+      return c.json(
+        {
+          error: "Insufficient balance",
+          viewerBalance: result.newViewerBalance,
+          pricePerSegment: session.pricePerSegment,
+          message: "Top up your session or close it to reclaim remaining funds",
+        },
+        402,
+      );
+    }
+
+    // Update database with new balances
+    await db
+      .update(yellowSessions)
+      .set({
+        viewerBalance: result.newViewerBalance,
+        creatorBalance: session.creatorBalance,
+        segmentsDelivered: session.segmentsDelivered,
+      })
+      .where(eq(yellowSessions.id, appSessionId));
+
+    logger.debug(
+      { appSessionId, segmentIndex, version, newBalance: result.newViewerBalance },
+      "Cosign successful, delivering key",
+    );
+
+    // Payment confirmed — deliver the AES key
+    return await deliverSegmentKey(c, videoId, segmentIndex);
+  } catch (err) {
+    logger.error(
+      { err, appSessionId, segmentIndex, version },
+      "Cosign payment processing failed",
+    );
+    return c.json({ error: "Payment processing failed", details: String(err) }, 500);
+  }
 });
 
 /**

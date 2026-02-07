@@ -8,6 +8,7 @@ export type { YellowClient } from "./client";
 export {
   createStreamingSession,
   processSegmentPayment,
+  cosignAndSubmitPayment,
   closeStreamingSession,
   getSession,
   getSessionByViewer,

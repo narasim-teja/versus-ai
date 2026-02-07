@@ -25,15 +25,28 @@ export function VideoPlayer({ video }: VideoPlayerProps) {
     startSession,
     endSession,
     markInsufficientBalance,
+    signAndRequestKey,
+    isYellowCosign,
+    ephemeralAddress,
   } = useVideoSession();
   const { walletAddress, isConnected } = useWallet();
   const [playerReady, setPlayerReady] = useState(false);
 
-  // Store getAuthHeader in a ref so xhrSetup always sees the latest value
+  // Store refs so HLS.js loader callbacks always see latest values
   const authHeaderRef = useRef(getAuthHeader);
   useEffect(() => {
     authHeaderRef.current = getAuthHeader;
   }, [getAuthHeader]);
+
+  const signAndRequestKeyRef = useRef(signAndRequestKey);
+  useEffect(() => {
+    signAndRequestKeyRef.current = signAndRequestKey;
+  }, [signAndRequestKey]);
+
+  const markInsufficientBalanceRef = useRef(markInsufficientBalance);
+  useEffect(() => {
+    markInsufficientBalanceRef.current = markInsufficientBalance;
+  }, [markInsufficientBalance]);
 
   // Initialize HLS.js once we have a session
   const initializePlayer = useCallback(() => {
@@ -53,9 +66,64 @@ export function VideoPlayer({ video }: VideoPlayerProps) {
       return;
     }
 
-    const hls = new Hls({
-      // Intercept XHR requests to add auth headers to key fetches
-      xhrSetup: (xhr: XMLHttpRequest, url: string) => {
+    const hlsConfig: Record<string, any> = {
+      maxBufferLength: 10,
+      maxMaxBufferLength: 30,
+    };
+
+    if (isYellowCosign) {
+      // ─── Custom loader for co-signed key requests ───
+      // Intercepts key URL requests, performs async co-signing,
+      // and returns the raw AES key from the /cosign endpoint.
+      const videoId = video.id;
+      const BaseLoader = Hls.DefaultConfig.loader as any;
+
+      hlsConfig.loader = class CosignLoader extends BaseLoader {
+        load(context: any, config: any, callbacks: any) {
+          // Detect key requests by URL pattern
+          const keyMatch = context.url?.match(/\/key\/(\d+)/);
+          if (keyMatch && signAndRequestKeyRef.current) {
+            const segmentIndex = parseInt(keyMatch[1], 10);
+            signAndRequestKeyRef
+              .current(videoId, segmentIndex)
+              .then((keyBuffer: ArrayBuffer) => {
+                callbacks.onSuccess(
+                  { data: new Uint8Array(keyBuffer), url: context.url },
+                  {
+                    trequest: performance.now(),
+                    tfirst: performance.now(),
+                    tload: performance.now(),
+                    loaded: keyBuffer.byteLength,
+                    total: keyBuffer.byteLength,
+                  },
+                  context,
+                  null
+                );
+              })
+              .catch((err: Error) => {
+                if (
+                  err.message?.includes("402") ||
+                  err.message?.includes("Insufficient")
+                ) {
+                  videoEl.pause();
+                  markInsufficientBalanceRef.current();
+                }
+                callbacks.onError(
+                  { code: 402, text: err.message || "Cosign failed" },
+                  context,
+                  null,
+                  { trequest: performance.now(), retry: 0 }
+                );
+              });
+            return;
+          }
+          // Default XHR loading for manifests, fragments, etc.
+          super.load(context, config, callbacks);
+        }
+      };
+    } else {
+      // ─── Legacy: auth headers via xhrSetup ───
+      hlsConfig.xhrSetup = (xhr: XMLHttpRequest, url: string) => {
         const isKeyRequest =
           url.includes("/api/videos/") && url.includes("/key/");
         if (isKeyRequest) {
@@ -64,10 +132,10 @@ export function VideoPlayer({ video }: VideoPlayerProps) {
             xhr.setRequestHeader(auth.name, auth.value);
           }
         }
-      },
-      maxBufferLength: 10,
-      maxMaxBufferLength: 30,
-    });
+      };
+    }
+
+    const hls = new Hls(hlsConfig);
 
     // Handle errors — especially 402 for insufficient balance
     hls.on(Hls.Events.ERROR, (_event, data) => {
@@ -105,7 +173,7 @@ export function VideoPlayer({ video }: VideoPlayerProps) {
     hls.attachMedia(videoEl);
     hls.loadSource(video.contentUri);
     hlsRef.current = hls;
-  }, [video.contentUri, session, markInsufficientBalance]);
+  }, [video.contentUri, video.id, session, isYellowCosign, markInsufficientBalance]);
 
   // Start session and then player
   const handleStartWatching = useCallback(async () => {
@@ -149,12 +217,12 @@ export function VideoPlayer({ video }: VideoPlayerProps) {
           <Play className="h-12 w-12 text-white/80" />
           <Button onClick={handleStartWatching} size="lg">
             {isConnected
-              ? "Start Watching (Yellow)"
+              ? "Start Watching (State Channel)"
               : "Start Watching (Legacy)"}
           </Button>
           <p className="max-w-md text-center text-xs text-muted-foreground">
             {isConnected
-              ? "A micropayment session will be created via Yellow Network"
+              ? "A co-signed state channel will be created via Yellow Network"
               : "Connect wallet for pay-per-segment streaming, or watch with legacy session"}
           </p>
         </div>
@@ -164,7 +232,11 @@ export function VideoPlayer({ video }: VideoPlayerProps) {
       {sessionState === "creating" && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/60">
           <Loader2 className="h-8 w-8 animate-spin text-white" />
-          <span className="ml-3 text-white">Creating session...</span>
+          <span className="ml-3 text-white">
+            {isYellowCosign
+              ? "Connecting to ClearNode..."
+              : "Creating session..."}
+          </span>
         </div>
       )}
 
@@ -195,6 +267,8 @@ export function VideoPlayer({ video }: VideoPlayerProps) {
           sessionState={sessionState}
           sessionStatus={sessionStatus}
           onClose={endSession}
+          ephemeralAddress={ephemeralAddress}
+          isStateChanelSession={isYellowCosign}
         />
       )}
     </div>

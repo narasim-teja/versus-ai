@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  transpilePackages: ["@erc7824/nitrolite"],
   webpack: (config) => {
     config.resolve.fallback = {
       ...config.resolve.fallback,

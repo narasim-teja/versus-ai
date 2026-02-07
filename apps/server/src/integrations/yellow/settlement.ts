@@ -1,28 +1,28 @@
 /**
  * Yellow Network Settlement
  *
- * After a streaming session closes, triggers on-chain revenue distribution
- * via the existing RevenueDistributor contract.
+ * After a streaming session closes on ClearNode, triggers revenue distribution.
+ * Logs final allocations with the revenue split for hackathon demo.
  *
  * Revenue split: 70% creator, 20% token holders, 10% protocol
  *
- * Note: For hackathon, settlement is logged but actual on-chain execution
- * requires the server wallet to hold USDC from ClearNode channel closure
- * and be whitelisted as a settler on RevenueDistributor.
+ * In production, the ClearNode channel closure returns USDC to the server,
+ * which then calls RevenueDistributor.distributeRevenue() on-chain.
  */
 
 import { logger } from "../../utils/logger";
 import type { StreamingSession } from "./session";
 
 /**
- * Trigger on-chain revenue distribution for a closed streaming session.
+ * Trigger revenue distribution for a closed streaming session.
  *
- * In production, this would:
- * 1. Receive USDC from ClearNode channel closure
- * 2. Approve RevenueDistributor to spend USDC
- * 3. Call RevenueDistributor.distributeRevenue(creatorTokenAddress, amount)
+ * Production flow:
+ * 1. ClearNode channel closes → USDC flows to server address
+ * 2. Server approves RevenueDistributor to spend USDC
+ * 3. Server calls RevenueDistributor.distributeRevenue(creatorTokenAddress, amount)
+ * 4. Contract splits: 70% creator, 20% buyback/burn, 10% protocol
  *
- * For now, logs the settlement intent for demo purposes.
+ * For hackathon: logs the settlement intent with full breakdown.
  */
 export async function triggerSettlement(
   session: StreamingSession,
@@ -37,21 +37,28 @@ export async function triggerSettlement(
     return null;
   }
 
-  // Log settlement for demo
+  const creatorShare = totalPaid * 0.7;
+  const tokenHolderShare = totalPaid * 0.2;
+  const protocolShare = totalPaid * 0.1;
+
   logger.info(
     {
       appSessionId: session.appSessionId,
       videoId: session.videoId,
       creator: session.creatorAddress,
+      server: session.serverAddress,
       totalPaid: session.creatorBalance,
+      viewerRefund: session.viewerBalance,
       segmentsDelivered: session.segmentsDelivered,
+      stateVersion: session.version,
+      sessionDuration: Math.round((Date.now() - session.createdAt) / 1000),
       revenue: {
-        creator: (totalPaid * 0.7).toFixed(6),
-        tokenHolders: (totalPaid * 0.2).toFixed(6),
-        protocol: (totalPaid * 0.1).toFixed(6),
+        creator: creatorShare.toFixed(6),
+        tokenHolders: tokenHolderShare.toFixed(6),
+        protocol: protocolShare.toFixed(6),
       },
     },
-    "Settlement triggered (revenue distribution)",
+    "Settlement: revenue distribution logged",
   );
 
   // TODO: Implement on-chain settlement when ready:
@@ -63,6 +70,7 @@ export async function triggerSettlement(
   //      functionName: "distributeRevenue",
   //      args: [creatorTokenAddress, parseUnits(session.creatorBalance, 6)]
   //    })
+  // 4. Return tx hash
 
   return null; // No tx hash yet - return hash when on-chain settlement is live
 }
