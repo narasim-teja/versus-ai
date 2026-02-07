@@ -88,6 +88,9 @@ export async function initializeUserWallet(
 /**
  * Create a contract execution challenge for a viewer wallet.
  * Returns a challengeId that must be executed on the client-side SDK.
+ *
+ * Note: Circle's transaction challenge API requires a userToken (JWT),
+ * not a userId. We obtain a fresh token before creating the challenge.
  */
 export async function createContractExecutionChallenge(params: {
   userId: string;
@@ -99,8 +102,11 @@ export async function createContractExecutionChallenge(params: {
 }): Promise<{ challengeId: string }> {
   const client = getUserWalletClient();
 
+  // Transaction challenges require a userToken (JWT), not a userId
+  const { userToken } = await getUserToken(params.userId);
+
   const response = await client.createUserTransactionContractExecutionChallenge({
-    userId: params.userId,
+    userToken,
     walletId: params.walletId,
     contractAddress: params.contractAddress,
     abiFunctionSignature: params.abiFunctionSignature,
@@ -154,10 +160,14 @@ export async function getUserWalletBalances(userId: string) {
   const wallets = await getUserWallets(userId);
   if (wallets.length === 0) return [];
 
+  // Balance queries require a userToken (JWT)
+  const { userToken } = await getUserToken(userId);
+
   const balances = await Promise.all(
     wallets.map(async (wallet: { id: string }) => {
       try {
         const balanceResponse = await client.getWalletTokenBalance({
+          userToken,
           walletId: wallet.id,
         });
         return {

@@ -54,7 +54,78 @@ export function useCircleWallet() {
 
   const connectWallet = useCallback(async () => {
     try {
-      // Step 1: Register user
+      // Check if we have a stored userId we can reconnect with
+      const stored = localStorage.getItem(STORAGE_KEY);
+      let existingData: { userId?: string; walletId?: string; walletAddress?: string } | null = null;
+      if (stored) {
+        try {
+          existingData = JSON.parse(stored);
+        } catch {
+          localStorage.removeItem(STORAGE_KEY);
+        }
+      }
+
+      let userId: string;
+
+      if (existingData?.userId) {
+        // Reconnect flow: re-use existing Circle user
+        userId = existingData.userId;
+        setState((s) => ({ ...s, status: "initializing", userId, error: null }));
+
+        // Get a fresh session token
+        const tokenRes = await fetch(`${config.apiBaseUrl}/api/auth/token`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId }),
+        });
+        if (!tokenRes.ok) {
+          // Token failed — user may no longer exist in Circle; fall through to fresh registration
+          console.warn("[CircleWallet] Stored user token failed, creating new user");
+          localStorage.removeItem(STORAGE_KEY);
+          existingData = null;
+        } else {
+          const { userToken, encryptionKey } = await tokenRes.json();
+          initCircleSdk(userToken, encryptionKey);
+
+          // Fetch wallet details (may already exist from previous session)
+          let walletAddress = existingData.walletAddress ?? null;
+          let walletId = existingData.walletId ?? null;
+
+          if (!walletAddress || !walletId) {
+            const walletsRes = await fetch(
+              `${config.apiBaseUrl}/api/auth/user/${userId}/wallets`
+            );
+            if (walletsRes.ok) {
+              const { wallets } = await walletsRes.json();
+              const wallet = wallets?.[0];
+              walletAddress = wallet?.address ?? null;
+              walletId = wallet?.id ?? null;
+            }
+          }
+
+          if (walletAddress && walletId) {
+            // Successfully reconnected
+            localStorage.setItem(
+              STORAGE_KEY,
+              JSON.stringify({ userId, walletId, walletAddress })
+            );
+            setState({
+              status: "connected",
+              userId,
+              walletId,
+              walletAddress,
+              error: null,
+            });
+            return;
+          }
+          // Wallet not found — fall through to fresh registration
+          console.warn("[CircleWallet] Stored user has no wallet, creating new user");
+          localStorage.removeItem(STORAGE_KEY);
+          existingData = null;
+        }
+      }
+
+      // Fresh registration flow
       setState((s) => ({ ...s, status: "registering", error: null }));
 
       const registerRes = await fetch(`${config.apiBaseUrl}/api/auth/register`, {
@@ -62,9 +133,9 @@ export function useCircleWallet() {
         headers: { "Content-Type": "application/json" },
       });
       if (!registerRes.ok) throw new Error("Registration failed");
-      const { userId } = await registerRes.json();
+      ({ userId } = await registerRes.json());
 
-      // Step 2: Get session token
+      // Get session token
       setState((s) => ({ ...s, status: "initializing", userId }));
 
       const tokenRes = await fetch(`${config.apiBaseUrl}/api/auth/token`, {
@@ -75,10 +146,10 @@ export function useCircleWallet() {
       if (!tokenRes.ok) throw new Error("Token generation failed");
       const { userToken, encryptionKey } = await tokenRes.json();
 
-      // Step 3: Initialize SDK
+      // Initialize SDK
       initCircleSdk(userToken, encryptionKey);
 
-      // Step 4: Create wallet initialization challenge
+      // Create wallet initialization challenge
       const initRes = await fetch(`${config.apiBaseUrl}/api/auth/initialize`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -87,11 +158,11 @@ export function useCircleWallet() {
       if (!initRes.ok) throw new Error("Wallet initialization failed");
       const { challengeId } = await initRes.json();
 
-      // Step 5: Execute challenge (user sets PIN via Circle UI)
+      // Execute challenge (user sets PIN via Circle UI)
       setState((s) => ({ ...s, status: "setting_pin" }));
       await executeChallenge(challengeId);
 
-      // Step 6: Get wallet address and ID (retry since Circle needs time to provision)
+      // Get wallet address and ID (retry since Circle needs time to provision)
       let walletAddress: string | null = null;
       let walletId: string | null = null;
       const maxRetries = 5;
@@ -167,7 +238,8 @@ export function useCircleWallet() {
   );
 
   const disconnect = useCallback(() => {
-    localStorage.removeItem(STORAGE_KEY);
+    // Keep userId/walletId/walletAddress in localStorage so reconnecting
+    // re-uses the same Circle user instead of creating a new one.
     setState({
       status: "disconnected",
       userId: null,

@@ -99,7 +99,11 @@ export function TokenTradingCard({
   }
 
   async function handleBuy() {
-    if (!userId || !walletId || !walletAddress || !quote) return;
+    if (!quote) return;
+    if (!userId || !walletId || !walletAddress) {
+      setTradeError("Wallet not fully connected. Please disconnect and reconnect.");
+      return;
+    }
     setTradeError(null);
 
     try {
@@ -167,7 +171,11 @@ export function TokenTradingCard({
   }
 
   async function handleSell() {
-    if (!userId || !walletId || !walletAddress || !quote) return;
+    if (!quote) return;
+    if (!userId || !walletId || !walletAddress) {
+      setTradeError("Wallet not fully connected. Please disconnect and reconnect.");
+      return;
+    }
     setTradeError(null);
 
     try {
