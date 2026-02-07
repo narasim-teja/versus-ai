@@ -38,7 +38,7 @@ export async function getOrCreateWallet(agentId: string): Promise<AgentWalletInf
       blockchain: existing.blockchain,
       walletSetId: existing.walletSetId,
       agentId: existing.agentId!,
-      createdAt: new Date(existing.createdAt!),
+      createdAt: existing.createdAt!,
     };
   }
 
@@ -65,7 +65,7 @@ export async function getOrCreateWallet(agentId: string): Promise<AgentWalletInf
   }
 
   const wallet = response.data.wallets[0];
-  const now = Date.now();
+  const now = new Date();
 
   // Step 3: Store in database
   await db.insert(circleWallets).values({
@@ -88,7 +88,7 @@ export async function getOrCreateWallet(agentId: string): Promise<AgentWalletInf
     blockchain: wallet.blockchain,
     walletSetId: wallet.walletSetId,
     agentId,
-    createdAt: new Date(now),
+    createdAt: now,
   };
 }
 
@@ -206,6 +206,6 @@ export async function getWalletByAgentId(
     blockchain: wallet.blockchain,
     walletSetId: wallet.walletSetId,
     agentId: wallet.agentId!,
-    createdAt: new Date(wallet.createdAt!),
+    createdAt: wallet.createdAt!,
   };
 }

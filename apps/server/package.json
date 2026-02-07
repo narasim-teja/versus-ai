@@ -14,25 +14,24 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "hono": "^4.4.0",
-    "viem": "^2.21.0",
-    "drizzle-orm": "^0.33.0",
     "@circle-fin/developer-controlled-wallets": "^9.4.0",
     "@circle-fin/user-controlled-wallets": "^10.1.0",
-    "zod": "^3.23.0",
+    "@erc7824/nitrolite": "latest",
+    "@supabase/supabase-js": "^2.49.1",
+    "@versus/streaming": "workspace:*",
+    "drizzle-orm": "^0.45.1",
+    "fluent-ffmpeg": "^2.1.3",
+    "hono": "^4.4.0",
     "pino": "^9.0.0",
     "pino-pretty": "^11.0.0",
-    "better-sqlite3": "^11.0.0",
-    "@versus/streaming": "workspace:*",
-    "@erc7824/nitrolite": "latest",
-    "fluent-ffmpeg": "^2.1.3",
-    "@supabase/supabase-js": "^2.49.1"
+    "postgres": "3.4.5",
+    "viem": "^2.21.0",
+    "zod": "^3.23.0"
   },
   "devDependencies": {
     "@types/bun": "latest",
-    "@types/better-sqlite3": "^7.6.11",
     "@types/fluent-ffmpeg": "^2.1.27",
-    "drizzle-kit": "^0.24.0",
+    "drizzle-kit": "^0.31.8",
     "typescript": "^5.5.0"
   }
 }

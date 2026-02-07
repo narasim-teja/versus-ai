@@ -14,6 +14,7 @@ import { getSegmentKey, getSegmentKeyRaw } from "../../video/key-handler";
 import { randomUUID } from "crypto";
 import { logger } from "../../utils/logger";
 import { env } from "../../utils/env";
+import { decryptSecret } from "../../utils/encryption";
 import {
   isYellowConfigured,
   createStreamingSession,
@@ -145,7 +146,7 @@ streamingRoutes.post("/:videoId/session", async (c) => {
 
   // ─── Legacy Bearer Token Path ───
   const sessionId = randomUUID();
-  const expiresAt = Date.now() + 2 * 60 * 60 * 1000; // 2 hours
+  const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000); // 2 hours
 
   await db.insert(viewerSessions).values({
     id: sessionId,
@@ -245,7 +246,7 @@ streamingRoutes.get("/:videoId/key/:segment", async (c) => {
         and(
           eq(viewerSessions.id, sessionToken),
           eq(viewerSessions.videoId, videoId),
-          gt(viewerSessions.expiresAt, Date.now()),
+          gt(viewerSessions.expiresAt, new Date()),
         ),
       )
       .limit(1);
@@ -405,7 +406,7 @@ streamingRoutes.post("/:videoId/session/:sessionId/close", async (c) => {
         creatorBalance: session.creatorBalance,
         segmentsDelivered: session.segmentsDelivered,
         status: "closed",
-        closedAt: Date.now(),
+        closedAt: new Date(),
       })
       .where(eq(yellowSessions.id, sessionId));
 
@@ -558,7 +559,7 @@ streamingRoutes.get("/:videoId/key-json/:segment", async (c) => {
         and(
           eq(viewerSessions.id, sessionToken),
           eq(viewerSessions.videoId, videoId),
-          gt(viewerSessions.expiresAt, Date.now()),
+          gt(viewerSessions.expiresAt, new Date()),
         ),
       )
       .limit(1);
@@ -587,7 +588,7 @@ streamingRoutes.get("/:videoId/key-json/:segment", async (c) => {
   }
 
   const keyResponse = getSegmentKey(
-    video[0].masterSecret,
+    decryptSecret(video[0].masterSecret),
     video[0].merkleTreeData,
     videoId,
     segmentIndex,
@@ -625,7 +626,7 @@ async function deliverSegmentKey(c: any, videoId: string, segmentIndex: number) 
     return c.json({ error: "Segment index out of range" }, 400);
   }
 
-  const key = getSegmentKeyRaw(video[0].masterSecret, videoId, segmentIndex);
+  const key = getSegmentKeyRaw(decryptSecret(video[0].masterSecret!), videoId, segmentIndex);
   if (!key) {
     return c.json({ error: "Failed to derive key" }, 500);
   }

@@ -65,7 +65,7 @@ export async function logDecision(
       stateSnapshot: serializeState(state),
       thinking: JSON.stringify(thinking),
       actions: serializeActions(actions),
-      createdAt: now,
+      createdAt: new Date(now),
     })
     .returning();
 

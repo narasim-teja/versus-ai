@@ -41,14 +41,17 @@ const envSchema = z.object({
   // Supabase (video storage)
   SUPABASE_URL: z.string().url().optional(),
   SUPABASE_SERVICE_KEY: z.string().min(1).optional(),
-  SUPABASE_STORAGE_BUCKET: z.string().default("versus-videos"),
+  SUPABASE_STORAGE_BUCKET: z.string().default("videos"),
 
   // Video processing
   VIDEO_SEGMENT_DURATION: z.coerce.number().default(5),
   VIDEO_QUALITY: z.string().default("720p"),
 
-  // Database
-  DATABASE_URL: z.string().default("file:./data/versus.db"),
+  // Database (Supabase PostgreSQL)
+  DATABASE_URL: z.string().url(),
+
+  // Encryption (for encrypting master secrets at rest)
+  ENCRYPTION_KEY: z.string().length(64).regex(/^[0-9a-fA-F]{64}$/, "Must be a 32-byte hex string"),
 
   // Server
   PORT: z.coerce.number().default(3001),

@@ -12,6 +12,7 @@ import { processVideo } from "../../video/processor";
 import { getStorageProvider, isSupabaseConfigured } from "../../integrations/supabase";
 import { env } from "../../utils/env";
 import { logger } from "../../utils/logger";
+import { encryptSecret } from "../../utils/encryption";
 
 const videoRoutes = new Hono();
 
@@ -159,11 +160,11 @@ videoRoutes.post("/upload", async (c) => {
       durationSeconds: result.durationSeconds,
       totalSegments: result.totalSegments,
       quality: result.quality,
-      masterSecret: result.masterSecret,
+      masterSecret: encryptSecret(result.masterSecret),
       merkleRoot: result.merkleRoot,
       merkleTreeData: result.merkleTreeData,
       contentUri: result.contentUri,
-      processedAt: Date.now(),
+      processedAt: new Date(),
     });
 
     logger.info(
@@ -301,11 +302,11 @@ videoRoutes.post("/agent-upload", async (c) => {
       durationSeconds: result.durationSeconds,
       totalSegments: result.totalSegments,
       quality: result.quality,
-      masterSecret: result.masterSecret,
+      masterSecret: encryptSecret(result.masterSecret),
       merkleRoot: result.merkleRoot,
       merkleTreeData: result.merkleTreeData,
       contentUri: result.contentUri,
-      processedAt: Date.now(),
+      processedAt: new Date(),
     });
 
     logger.info(

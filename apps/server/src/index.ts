@@ -14,7 +14,7 @@ import { cors } from "hono/cors";
 import { logger as honoLogger } from "hono/logger";
 import { env } from "./utils/env";
 import { logger } from "./utils/logger";
-import { initializeDatabase } from "./db/client";
+import { initializeDatabase, closeDatabase } from "./db/client";
 import { healthRoutes, agentRoutes, agentsWebsocket, videoRoutes, streamingRoutes, authRoutes, tradingRoutes } from "./api/routes";
 import { createAllAgentConfigs, startAllAgents, stopAllAgents } from "./agents";
 import { initializeAgentWallets } from "./agents/init";
@@ -89,7 +89,7 @@ const eventUnwatchers: Array<() => void> = [];
 
 // Graceful shutdown handler
 function setupShutdownHandler() {
-  const shutdown = () => {
+  const shutdown = async () => {
     logger.info("Shutdown signal received, stopping agents...");
     stopAllAgents();
     // Stop event watchers
@@ -98,7 +98,9 @@ function setupShutdownHandler() {
     }
     // Disconnect Yellow Network
     disconnectYellow();
-    logger.info("Agents, event watchers, and Yellow stopped, exiting...");
+    // Close database connection pool
+    await closeDatabase();
+    logger.info("Agents, event watchers, Yellow stopped, and DB closed. Exiting...");
     process.exit(0);
   };
 
@@ -111,7 +113,7 @@ async function main() {
   logger.info({ nodeEnv: env.NODE_ENV }, "Starting Versus Agent Server");
 
   // Initialize database
-  initializeDatabase();
+  await initializeDatabase();
 
   // Set up shutdown handler
   setupShutdownHandler();
