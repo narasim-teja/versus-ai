@@ -314,8 +314,42 @@ trading.post("/execute", async (c) => {
 
     return c.json(challengeResult);
   } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to create trade challenge";
     logger.error({ userId, action, contractAddress, error }, "Failed to create trade challenge");
-    return c.json({ error: "Failed to create trade challenge" }, 500);
+    return c.json({ error: message }, 500);
+  }
+});
+
+/**
+ * GET /api/trading/allowance
+ *
+ * Check on-chain ERC-20 allowance for a given owner → spender pair.
+ * Used by the frontend to verify approval tx is confirmed before buying.
+ * Query params: tokenAddress, owner, spender
+ */
+trading.get("/allowance", async (c) => {
+  const tokenAddress = c.req.query("tokenAddress");
+  const owner = c.req.query("owner");
+  const spender = c.req.query("spender");
+
+  if (!tokenAddress || !owner || !spender) {
+    return c.json(
+      { error: "tokenAddress, owner, and spender are required" },
+      400
+    );
+  }
+
+  try {
+    const token = getERC20(tokenAddress as Address);
+    const allowance = await token.read.allowance([
+      owner as Address,
+      spender as Address,
+    ]);
+    return c.json({ allowance: allowance.toString() });
+  } catch (error) {
+    logger.error({ tokenAddress, owner, spender, error }, "Failed to check allowance");
+    return c.json({ error: "Failed to check allowance" }, 500);
   }
 });
 

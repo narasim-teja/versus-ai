@@ -84,3 +84,15 @@ export async function executeTradeAction(body: {
     body: JSON.stringify(body),
   });
 }
+
+export async function fetchAllowance(
+  tokenAddress: string,
+  owner: string,
+  spender: string
+): Promise<string> {
+  const params = new URLSearchParams({ tokenAddress, owner, spender });
+  const data = await fetchJson<{ allowance: string }>(
+    `/api/trading/allowance?${params}`
+  );
+  return data.allowance;
+}

@@ -16,7 +16,8 @@ import { Separator } from "@/components/ui/Separator";
 import { MetricRow } from "@/components/dashboard/MetricRow";
 import { useWallet } from "@/components/wallet/WalletProvider";
 import { useTradeQuote } from "@/hooks/useTradeQuote";
-import { executeTradeAction } from "@/lib/api";
+import { executeTradeAction, fetchAllowance, fetchTradeQuote } from "@/lib/api";
+import { config } from "@/lib/config";
 import {
   formatTokenPrice,
   formatTokenSupply,
@@ -42,7 +43,8 @@ export function TokenTradingCard({
   price,
   totalSupply,
 }: TokenTradingCardProps) {
-  const { userId, walletId, isConnected, executeTradingChallenge } = useWallet();
+  const { userId, walletId, walletAddress, isConnected, executeTradingChallenge } =
+    useWallet();
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [inputAmount, setInputAmount] = useState("");
   const [tradeStep, setTradeStep] = useState<TradeStep>("idle");
@@ -69,27 +71,79 @@ export function TokenTradingCard({
 
   const displayName = agentName.split(" ")[0];
   const hasValidAmount = rawAmount !== "0";
-  const canTrade = isConnected && hasValidAmount && tradeStep === "idle";
+  const hasQuote = !!quote && quote.amountOut !== "0";
+  const canTrade =
+    isConnected && hasValidAmount && hasQuote && tradeStep === "idle";
+
+  /**
+   * Poll on-chain allowance until it meets the required amount.
+   * Prevents the buy/sell from firing before the approve tx is mined.
+   */
+  async function waitForAllowance(
+    tokenAddr: string,
+    owner: string,
+    spender: string,
+    requiredAmount: bigint,
+    maxAttempts = 20
+  ) {
+    for (let i = 0; i < maxAttempts; i++) {
+      await new Promise((r) => setTimeout(r, 2000));
+      try {
+        const allowance = await fetchAllowance(tokenAddr, owner, spender);
+        if (BigInt(allowance) >= requiredAmount) return;
+      } catch {
+        // ignore transient fetch errors and keep polling
+      }
+    }
+    throw new Error("Approval not confirmed on-chain. Please try again.");
+  }
 
   async function handleBuy() {
-    if (!userId || !walletId) return;
+    if (!userId || !walletId || !walletAddress || !quote) return;
     setTradeError(null);
 
     try {
-      // Step 1: Approve USDC spending on the bonding curve
+      // Step 1: Check existing USDC allowance — skip approve if already sufficient
       setTradeStep("approving");
-      const approveResult = await executeTradeAction({
-        userId,
-        walletId,
-        action: "approve_usdc",
-        contractAddress: bondingCurveAddress,
-        params: { spender: bondingCurveAddress },
-      });
-      await executeTradingChallenge(approveResult.challengeId);
+      const requiredAmount = BigInt(rawAmount);
+      let needsApproval = true;
 
-      // Step 2: Execute buy
+      try {
+        const currentAllowance = await fetchAllowance(
+          config.usdcAddress,
+          walletAddress,
+          bondingCurveAddress
+        );
+        if (BigInt(currentAllowance) >= requiredAmount) {
+          needsApproval = false;
+        }
+      } catch {
+        // If check fails, proceed with approval to be safe
+      }
+
+      if (needsApproval) {
+        const approveResult = await executeTradeAction({
+          userId,
+          walletId,
+          action: "approve_usdc",
+          contractAddress: bondingCurveAddress,
+          params: { spender: bondingCurveAddress },
+        });
+        await executeTradingChallenge(approveResult.challengeId);
+
+        // Wait for approval to be confirmed on-chain before buying
+        await waitForAllowance(
+          config.usdcAddress,
+          walletAddress,
+          bondingCurveAddress,
+          requiredAmount
+        );
+      }
+
+      // Step 2: Re-fetch a fresh quote (price may have moved during approval)
       setTradeStep("executing");
-      const minTokensOut = quote?.amountOut ?? "0";
+      const freshQuote = await fetchTradeQuote(bondingCurveAddress, "buy", rawAmount);
+      const minTokensOut = freshQuote.amountOut;
       const buyResult = await executeTradeAction({
         userId,
         walletId,
@@ -113,27 +167,54 @@ export function TokenTradingCard({
   }
 
   async function handleSell() {
-    if (!userId || !walletId) return;
+    if (!userId || !walletId || !walletAddress || !quote) return;
     setTradeError(null);
 
     try {
-      // Step 1: Approve token spending on the bonding curve
+      // Step 1: Check existing token allowance — skip approve if sufficient
       setTradeStep("approving");
-      const approveResult = await executeTradeAction({
-        userId,
-        walletId,
-        action: "approve_token",
-        contractAddress: bondingCurveAddress,
-        params: {
-          spender: bondingCurveAddress,
-          tokenAddress,
-        },
-      });
-      await executeTradingChallenge(approveResult.challengeId);
+      const requiredAmount = BigInt(rawAmount);
+      let needsApproval = true;
 
-      // Step 2: Execute sell
+      try {
+        const currentAllowance = await fetchAllowance(
+          tokenAddress,
+          walletAddress,
+          bondingCurveAddress
+        );
+        if (BigInt(currentAllowance) >= requiredAmount) {
+          needsApproval = false;
+        }
+      } catch {
+        // If check fails, proceed with approval to be safe
+      }
+
+      if (needsApproval) {
+        const approveResult = await executeTradeAction({
+          userId,
+          walletId,
+          action: "approve_token",
+          contractAddress: bondingCurveAddress,
+          params: {
+            spender: bondingCurveAddress,
+            tokenAddress,
+          },
+        });
+        await executeTradingChallenge(approveResult.challengeId);
+
+        // Wait for approval to be confirmed on-chain before selling
+        await waitForAllowance(
+          tokenAddress,
+          walletAddress,
+          bondingCurveAddress,
+          requiredAmount
+        );
+      }
+
+      // Step 2: Re-fetch a fresh quote (price may have moved during approval)
       setTradeStep("executing");
-      const minUsdcOut = quote?.amountOut ?? "0";
+      const freshQuote = await fetchTradeQuote(bondingCurveAddress, "sell", rawAmount);
+      const minUsdcOut = freshQuote.amountOut;
       const sellResult = await executeTradeAction({
         userId,
         walletId,
@@ -159,7 +240,7 @@ export function TokenTradingCard({
   function getButtonLabel(action: "buy" | "sell") {
     switch (tradeStep) {
       case "approving":
-        return "Approve in wallet...";
+        return "Approving...";
       case "executing":
         return action === "buy" ? "Confirm buy..." : "Confirm sell...";
       case "done":
@@ -168,6 +249,7 @@ export function TokenTradingCard({
         return "Failed — try again";
       default:
         if (!isConnected) return "Connect wallet";
+        if (hasValidAmount && !hasQuote && quoteLoading) return "Fetching quote...";
         return action === "buy" ? "Buy" : "Sell";
     }
   }

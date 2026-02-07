@@ -27,6 +27,7 @@ export function getCircleSdk(): W3SSdk | null {
 
 /**
  * Execute a Circle challenge (PIN setup, wallet creation, etc.).
+ * Rejects if the challenge status indicates failure.
  */
 export function executeChallenge(
   challengeId: string
@@ -42,10 +43,17 @@ export function executeChallenge(
         reject(new Error(error.message ?? "Challenge failed"));
         return;
       }
-      resolve({
-        type: result?.type ?? "unknown",
-        status: result?.status ?? "unknown",
-      });
+
+      const status = result?.status ?? "unknown";
+      const type = result?.type ?? "unknown";
+
+      // Only resolve on COMPLETE; reject on any other terminal status
+      if (status !== "COMPLETE" && status !== "IN_PROGRESS" && status !== "PENDING") {
+        reject(new Error(`Challenge ${status.toLowerCase()}`));
+        return;
+      }
+
+      resolve({ type, status });
     });
   });
 }
