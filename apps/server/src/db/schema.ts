@@ -170,6 +170,13 @@ export const videos = pgTable(
     merkleTreeData: text("merkle_tree_data"),
     contentUri: text("content_uri"),
     thumbnailUri: text("thumbnail_uri"),
+    // Denormalized agent fields for on-chain settlement
+    creatorWallet: text("creator_wallet"),
+    creatorTokenAddress: text("creator_token_address"),
+    creatorBondingCurveAddress: text("creator_bonding_curve_address"),
+    // On-chain registration (Base Sepolia)
+    registryTxHash: text("registry_tx_hash"),
+    registryChainId: integer("registry_chain_id"),
     createdAt: timestamp("created_at").defaultNow(),
     processedAt: timestamp("processed_at"),
   },
@@ -236,7 +243,14 @@ export const yellowSessions = pgTable(
     segmentsDelivered: integer("segments_delivered").default(0),
     pricePerSegment: text("price_per_segment").notNull(),
     status: text("status").notNull().default("active"), // active | closed | settled
-    settlementTxHash: text("settlement_tx_hash"),
+    // Denormalized agent fields for settlement
+    creatorTokenAddress: text("creator_token_address"),
+    creatorBondingCurveAddress: text("creator_bonding_curve_address"),
+    // Settlement tx tracking (cross-chain)
+    settlementTxHash: text("settlement_tx_hash"), // legacy field
+    settlementTxHashBase: text("settlement_tx_hash_base"), // Base Sepolia settlement record
+    bridgeTxHash: text("bridge_tx_hash"), // Base Sepolia bridge escrow
+    distributionTxHash: text("distribution_tx_hash"), // ARC testnet revenue distribution
     createdAt: timestamp("created_at").defaultNow(),
     closedAt: timestamp("closed_at"),
   },

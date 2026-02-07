@@ -7,7 +7,7 @@ import {
   fetchSessionStatus,
 } from "@/lib/api";
 import { config } from "@/lib/config";
-import type { ViewingSession, SessionStatus } from "@/lib/types";
+import type { ViewingSession, SessionStatus, SessionCloseResult } from "@/lib/types";
 import { useYellowSession } from "./useYellowSession";
 
 export type SessionState =
@@ -40,6 +40,8 @@ interface UseVideoSessionReturn {
   isYellowCosign: boolean;
   /** Ephemeral address used for the state channel */
   ephemeralAddress: string | null;
+  /** Settlement result after session close (cross-chain tx hashes) */
+  settlementResult: SessionCloseResult | null;
 }
 
 export function useVideoSession(): UseVideoSessionReturn {
@@ -250,5 +252,6 @@ export function useVideoSession(): UseVideoSessionReturn {
     signAndRequestKey: isYellowCosign ? yellow.signAndRequestKey : null,
     isYellowCosign,
     ephemeralAddress: yellow.state.ephemeralAddress,
+    settlementResult: yellow.settlementResult,
   };
 }

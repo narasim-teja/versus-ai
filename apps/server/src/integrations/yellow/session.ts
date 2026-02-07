@@ -18,7 +18,7 @@ import {
   createCloseAppSessionMessage,
 } from "@erc7824/nitrolite";
 import { getYellowClient, isYellowConfigured } from "./client";
-import { triggerSettlement } from "./settlement";
+import { triggerSettlement, type SettlementResult } from "./settlement";
 import { env } from "../../utils/env";
 import { logger } from "../../utils/logger";
 import { randomUUID } from "crypto";
@@ -39,6 +39,9 @@ export interface StreamingSession {
   version: number;
   createdAt: number;
   lastPaymentAt: number;
+  // On-chain settlement fields (denormalized from agent)
+  creatorTokenAddress: string;
+  creatorBondingCurveAddress: string;
 }
 
 // ─── In-Memory Session Store ─────────────────────────────────────────
@@ -60,6 +63,8 @@ export async function createStreamingSession(
   viewerAddress: string,
   creatorAddress: string,
   depositAmount: string,
+  creatorTokenAddress: string = "",
+  creatorBondingCurveAddress: string = "",
 ): Promise<StreamingSession> {
   const pricePerSegment = env.YELLOW_PRICE_PER_SEGMENT;
   const client = await getYellowClient();
@@ -133,6 +138,8 @@ export async function createStreamingSession(
     version: 0,
     createdAt: Date.now(),
     lastPaymentAt: Date.now(),
+    creatorTokenAddress,
+    creatorBondingCurveAddress,
   };
 
   activeSessions.set(appSessionId, session);
@@ -340,7 +347,7 @@ export async function processSegmentPayment(
  */
 export async function closeStreamingSession(
   appSessionId: string,
-): Promise<{ settled: boolean; totalPaid: string }> {
+): Promise<{ settled: boolean; totalPaid: string; settlement: SettlementResult }> {
   const session = activeSessions.get(appSessionId);
   if (!session) {
     throw new Error(`Streaming session not found: ${appSessionId}`);
@@ -393,13 +400,20 @@ export async function closeStreamingSession(
     "Yellow streaming session closed",
   );
 
-  // Trigger revenue distribution (logs intent for hackathon demo)
-  await triggerSettlement(session).catch((err) => {
+  // Trigger cross-chain revenue distribution
+  let settlement: SettlementResult = {
+    settlementTxHash: null,
+    bridgeTxHash: null,
+    distributionTxHash: null,
+  };
+  try {
+    settlement = await triggerSettlement(session);
+  } catch (err) {
     logger.warn({ err, appSessionId }, "Settlement trigger failed");
-  });
+  }
 
   activeSessions.delete(appSessionId);
-  return { settled: true, totalPaid };
+  return { settled: true, totalPaid, settlement };
 }
 
 // ─── Lookup Helpers ──────────────────────────────────────────────────

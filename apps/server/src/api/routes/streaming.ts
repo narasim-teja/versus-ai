@@ -86,16 +86,24 @@ streamingRoutes.post("/:videoId/session", async (c) => {
       video[0].agentId || "0x0000000000000000000000000000000000000000";
 
     try {
-      // Look up creator's EVM address from agents table if agentId exists
+      // Look up creator's EVM address and token details from agents table
       let creatorEvmAddress = creatorAddress;
+      let creatorTokenAddress = "";
+      let creatorBondingCurveAddress = "";
       if (video[0].agentId) {
         const agent = await db
-          .select({ evmAddress: agents.evmAddress })
+          .select({
+            evmAddress: agents.evmAddress,
+            tokenAddress: agents.tokenAddress,
+            bondingCurveAddress: agents.bondingCurveAddress,
+          })
           .from(agents)
           .where(eq(agents.id, video[0].agentId))
           .limit(1);
         if (agent.length > 0) {
           creatorEvmAddress = agent[0].evmAddress;
+          creatorTokenAddress = agent[0].tokenAddress;
+          creatorBondingCurveAddress = agent[0].bondingCurveAddress;
         }
       }
 
@@ -104,6 +112,8 @@ streamingRoutes.post("/:videoId/session", async (c) => {
         viewerAddress,
         creatorEvmAddress,
         depositAmount,
+        creatorTokenAddress,
+        creatorBondingCurveAddress,
       );
 
       // Persist to database
@@ -119,6 +129,8 @@ streamingRoutes.post("/:videoId/session", async (c) => {
         segmentsDelivered: 0,
         pricePerSegment: session.pricePerSegment,
         status: "active",
+        creatorTokenAddress: creatorTokenAddress || null,
+        creatorBondingCurveAddress: creatorBondingCurveAddress || null,
       });
 
       logger.info(
@@ -398,7 +410,7 @@ streamingRoutes.post("/:videoId/session/:sessionId/close", async (c) => {
   try {
     const result = await closeStreamingSession(sessionId);
 
-    // Update database
+    // Update database with settlement tx hashes
     await db
       .update(yellowSessions)
       .set({
@@ -407,12 +419,15 @@ streamingRoutes.post("/:videoId/session/:sessionId/close", async (c) => {
         segmentsDelivered: session.segmentsDelivered,
         status: "closed",
         closedAt: new Date(),
+        settlementTxHashBase: result.settlement.settlementTxHash,
+        bridgeTxHash: result.settlement.bridgeTxHash,
+        distributionTxHash: result.settlement.distributionTxHash,
       })
       .where(eq(yellowSessions.id, sessionId));
 
     logger.info(
-      { sessionId, videoId, totalPaid: result.totalPaid },
-      "Yellow session closed",
+      { sessionId, videoId, totalPaid: result.totalPaid, settlement: result.settlement },
+      "Yellow session closed with on-chain settlement",
     );
 
     return c.json({
@@ -420,6 +435,22 @@ streamingRoutes.post("/:videoId/session/:sessionId/close", async (c) => {
       totalPaid: result.totalPaid,
       settled: result.settled,
       segmentsDelivered: session.segmentsDelivered,
+      // Cross-chain settlement tx hashes
+      settlementTxHash: result.settlement.settlementTxHash,
+      bridgeTxHash: result.settlement.bridgeTxHash,
+      distributionTxHash: result.settlement.distributionTxHash,
+      // Explorer links for judges
+      explorerLinks: {
+        settlement: result.settlement.settlementTxHash
+          ? `https://sepolia.basescan.org/tx/${result.settlement.settlementTxHash}`
+          : null,
+        bridge: result.settlement.bridgeTxHash
+          ? `https://sepolia.basescan.org/tx/${result.settlement.bridgeTxHash}`
+          : null,
+        distribution: result.settlement.distributionTxHash
+          ? `https://explorer-testnet.arc.dev/tx/${result.settlement.distributionTxHash}`
+          : null,
+      },
     });
   } catch (err) {
     logger.error({ err, sessionId }, "Failed to close Yellow session");

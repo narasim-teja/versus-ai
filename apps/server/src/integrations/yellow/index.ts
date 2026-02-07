@@ -17,3 +17,4 @@ export {
 export type { StreamingSession } from "./session";
 
 export { triggerSettlement } from "./settlement";
+export type { SettlementResult } from "./settlement";

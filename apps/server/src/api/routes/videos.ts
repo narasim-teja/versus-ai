@@ -13,6 +13,7 @@ import { getStorageProvider, isSupabaseConfigured } from "../../integrations/sup
 import { env } from "../../utils/env";
 import { logger } from "../../utils/logger";
 import { encryptSecret } from "../../utils/encryption";
+import { registerVideoOnChain } from "../../integrations/chain/video-registry";
 
 const videoRoutes = new Hono();
 
@@ -150,6 +151,27 @@ videoRoutes.post("/upload", async (c) => {
       keyServerBaseUrl,
     });
 
+    // Look up agent details for on-chain settlement (if agentId provided)
+    let creatorWallet: string | null = null;
+    let creatorTokenAddress: string | null = null;
+    let creatorBondingCurveAddress: string | null = null;
+    if (agentId) {
+      const agent = await db
+        .select({
+          evmAddress: agents.evmAddress,
+          tokenAddress: agents.tokenAddress,
+          bondingCurveAddress: agents.bondingCurveAddress,
+        })
+        .from(agents)
+        .where(eq(agents.id, agentId))
+        .limit(1);
+      if (agent.length > 0) {
+        creatorWallet = agent[0].evmAddress;
+        creatorTokenAddress = agent[0].tokenAddress;
+        creatorBondingCurveAddress = agent[0].bondingCurveAddress;
+      }
+    }
+
     // Store in database
     await db.insert(videos).values({
       id: result.videoId,
@@ -164,6 +186,9 @@ videoRoutes.post("/upload", async (c) => {
       merkleRoot: result.merkleRoot,
       merkleTreeData: result.merkleTreeData,
       contentUri: result.contentUri,
+      creatorWallet,
+      creatorTokenAddress,
+      creatorBondingCurveAddress,
       processedAt: new Date(),
     });
 
@@ -175,6 +200,24 @@ videoRoutes.post("/upload", async (c) => {
       },
       "Video processed and stored"
     );
+
+    // Register merkle root on-chain (Base Sepolia) - fire and forget
+    let registryTxHash: string | null = null;
+    if (result.merkleRoot) {
+      registryTxHash = await registerVideoOnChain(
+        result.videoId,
+        result.merkleRoot,
+        creatorWallet || "0x0000000000000000000000000000000000000000",
+        result.totalSegments,
+      );
+
+      if (registryTxHash) {
+        await db
+          .update(videos)
+          .set({ registryTxHash, registryChainId: 84532 })
+          .where(eq(videos.id, result.videoId));
+      }
+    }
 
     return c.json({
       video: {
@@ -188,6 +231,10 @@ videoRoutes.post("/upload", async (c) => {
         quality: result.quality,
         contentUri: result.contentUri,
         merkleRoot: result.merkleRoot,
+        registryTxHash,
+        registryExplorerLink: registryTxHash
+          ? `https://sepolia.basescan.org/tx/${registryTxHash}`
+          : null,
       },
     });
   } catch (error) {

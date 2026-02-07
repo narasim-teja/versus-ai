@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Film, Clock, Layers, Loader2 } from "lucide-react";
+import { ArrowLeft, Film, Clock, Layers, Loader2, ShieldCheck } from "lucide-react";
 import { Header } from "@/components/layout/Header";
 import { VideoPlayer } from "@/components/videos/VideoPlayer";
 import { Badge } from "@/components/ui/Badge";
@@ -117,6 +117,21 @@ export default function VideoPage() {
                   >
                     Creator: {video.agentId}
                   </Badge>
+                )}
+                {video.registryTxHash && (
+                  <a
+                    href={video.registryExplorerLink || `https://sepolia.basescan.org/tx/${video.registryTxHash}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <Badge
+                      variant="outline"
+                      className="gap-1 border-green-500/20 bg-green-500/10 text-green-400 hover:bg-green-500/20 cursor-pointer"
+                    >
+                      <ShieldCheck className="h-3 w-3" />
+                      On-Chain Verified
+                    </Badge>
+                  </a>
                 )}
               </div>
             </div>

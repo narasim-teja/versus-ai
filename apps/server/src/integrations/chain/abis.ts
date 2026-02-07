@@ -372,6 +372,141 @@ export const revenueDistributorAbi = [
     inputs: [{ name: "token", type: "address" }],
     outputs: [{ type: "address" }],
   },
+  {
+    name: "whitelistedSettlers",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "settler", type: "address" }],
+    outputs: [{ type: "bool" }],
+  },
+  {
+    name: "distributeRevenue",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "token", type: "address" },
+      { name: "amount", type: "uint256" },
+    ],
+    outputs: [],
+  },
+  {
+    name: "RevenueDistributed",
+    type: "event",
+    inputs: [
+      { name: "token", type: "address", indexed: true },
+      { name: "amount", type: "uint256", indexed: false },
+      { name: "creatorAmount", type: "uint256", indexed: false },
+      { name: "holderAmount", type: "uint256", indexed: false },
+      { name: "protocolAmount", type: "uint256", indexed: false },
+    ],
+  },
+] as const;
+
+export const videoRegistryAbi = [
+  {
+    name: "registerVideo",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "videoIdHash", type: "bytes32" },
+      { name: "merkleRoot", type: "bytes32" },
+      { name: "creator", type: "address" },
+      { name: "totalSegments", type: "uint256" },
+    ],
+    outputs: [],
+  },
+  {
+    name: "recordSettlement",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "videoIdHash", type: "bytes32" },
+      { name: "viewer", type: "address" },
+      { name: "segmentsWatched", type: "uint256" },
+      { name: "totalPaid", type: "uint256" },
+      { name: "yellowSessionId", type: "string" },
+    ],
+    outputs: [],
+  },
+  {
+    name: "getVideo",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "videoIdHash", type: "bytes32" }],
+    outputs: [
+      {
+        type: "tuple",
+        components: [
+          { name: "merkleRoot", type: "bytes32" },
+          { name: "creator", type: "address" },
+          { name: "totalSegments", type: "uint256" },
+          { name: "timestamp", type: "uint256" },
+        ],
+      },
+    ],
+  },
+  {
+    name: "getVideoCount",
+    type: "function",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    name: "VideoRegistered",
+    type: "event",
+    inputs: [
+      { name: "videoIdHash", type: "bytes32", indexed: true },
+      { name: "merkleRoot", type: "bytes32", indexed: false },
+      { name: "creator", type: "address", indexed: true },
+      { name: "totalSegments", type: "uint256", indexed: false },
+    ],
+  },
+  {
+    name: "SettlementRecorded",
+    type: "event",
+    inputs: [
+      { name: "videoIdHash", type: "bytes32", indexed: true },
+      { name: "viewer", type: "address", indexed: true },
+      { name: "segmentsWatched", type: "uint256", indexed: false },
+      { name: "totalPaid", type: "uint256", indexed: false },
+      { name: "yellowSessionId", type: "string", indexed: false },
+    ],
+  },
+] as const;
+
+export const bridgeEscrowAbi = [
+  {
+    name: "initiateBridge",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "amount", type: "uint256" },
+      { name: "destinationChainId", type: "uint32" },
+      { name: "creator", type: "address" },
+      { name: "creatorToken", type: "address" },
+    ],
+    outputs: [],
+  },
+  {
+    name: "bridgeNonce",
+    type: "function",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    name: "BridgeInitiated",
+    type: "event",
+    inputs: [
+      { name: "nonce", type: "uint256", indexed: true },
+      { name: "amount", type: "uint256", indexed: false },
+      { name: "sourceChainId", type: "uint32", indexed: false },
+      { name: "destinationChainId", type: "uint32", indexed: false },
+      { name: "creator", type: "address", indexed: true },
+      { name: "creatorToken", type: "address", indexed: true },
+    ],
+  },
 ] as const;
 
 export const erc20Abi = [

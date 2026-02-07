@@ -1,32 +1,41 @@
 /**
  * Yellow Network Settlement
  *
- * After a streaming session closes on ClearNode, triggers revenue distribution.
- * Logs final allocations with the revenue split for hackathon demo.
+ * After a streaming session closes on ClearNode, triggers cross-chain settlement:
+ * 1. Record settlement on Base Sepolia (VideoRegistry)
+ * 2. Initiate bridge from Base Sepolia to ARC (BridgeEscrow)
+ * 3. Distribute revenue on ARC testnet (RevenueDistributor)
  *
  * Revenue split: 70% creator, 20% token holders, 10% protocol
- *
- * In production, the ClearNode channel closure returns USDC to the server,
- * which then calls RevenueDistributor.distributeRevenue() on-chain.
  */
 
 import { logger } from "../../utils/logger";
 import type { StreamingSession } from "./session";
+import {
+  recordSettlementOnChain,
+  initiateBridgeOnChain,
+  distributeRevenueOnChain,
+} from "../chain/video-registry";
+
+export interface SettlementResult {
+  settlementTxHash: string | null; // Base Sepolia - settlement record
+  bridgeTxHash: string | null; // Base Sepolia - bridge escrow
+  distributionTxHash: string | null; // ARC testnet - revenue distribution
+}
 
 /**
- * Trigger revenue distribution for a closed streaming session.
+ * Trigger cross-chain revenue distribution for a closed streaming session.
  *
- * Production flow:
- * 1. ClearNode channel closes → USDC flows to server address
- * 2. Server approves RevenueDistributor to spend USDC
- * 3. Server calls RevenueDistributor.distributeRevenue(creatorTokenAddress, amount)
- * 4. Contract splits: 70% creator, 20% buyback/burn, 10% protocol
+ * Flow:
+ * 1. Record settlement on Base Sepolia (same chain as Yellow Custody/Adjudicator)
+ * 2. Lock USDC in BridgeEscrow on Base Sepolia (CCTP demo)
+ * 3. Distribute revenue on ARC testnet via RevenueDistributor
  *
- * For hackathon: logs the settlement intent with full breakdown.
+ * All on-chain calls are gracefully degraded — if one fails, the rest continue.
  */
 export async function triggerSettlement(
   session: StreamingSession,
-): Promise<string | null> {
+): Promise<SettlementResult> {
   const totalPaid = parseFloat(session.creatorBalance);
 
   if (totalPaid <= 0) {
@@ -34,7 +43,7 @@ export async function triggerSettlement(
       { appSessionId: session.appSessionId },
       "No revenue to settle (zero paid)",
     );
-    return null;
+    return { settlementTxHash: null, bridgeTxHash: null, distributionTxHash: null };
   }
 
   const creatorShare = totalPaid * 0.7;
@@ -58,19 +67,56 @@ export async function triggerSettlement(
         protocol: protocolShare.toFixed(6),
       },
     },
-    "Settlement: revenue distribution logged",
+    "Settlement: initiating cross-chain revenue distribution",
   );
 
-  // TODO: Implement on-chain settlement when ready:
-  // 1. Resolve creator's token address from creatorAddress
-  // 2. const walletClient = createWalletClient({ account, chain: baseSepolia, transport: http() })
-  // 3. await walletClient.writeContract({
-  //      address: env.REVENUE_DISTRIBUTOR_ADDRESS,
-  //      abi: revenueDistributorAbi,
-  //      functionName: "distributeRevenue",
-  //      args: [creatorTokenAddress, parseUnits(session.creatorBalance, 6)]
-  //    })
-  // 4. Return tx hash
+  // Step 1: Record settlement on Base Sepolia (VideoRegistry)
+  const settlementTxHash = await recordSettlementOnChain(
+    session.videoId,
+    session.viewerAddress,
+    session.segmentsDelivered,
+    session.creatorBalance,
+    session.appSessionId,
+  );
 
-  return null; // No tx hash yet - return hash when on-chain settlement is live
+  // Step 2: Initiate bridge on Base Sepolia (BridgeEscrow → CCTP demo)
+  let bridgeTxHash: string | null = null;
+  if (session.creatorTokenAddress) {
+    bridgeTxHash = await initiateBridgeOnChain(
+      session.creatorBalance,
+      session.creatorAddress,
+      session.creatorTokenAddress,
+    );
+  } else {
+    logger.warn(
+      { appSessionId: session.appSessionId },
+      "No creatorTokenAddress — skipping bridge",
+    );
+  }
+
+  // Step 3: Distribute revenue on ARC testnet (RevenueDistributor)
+  let distributionTxHash: string | null = null;
+  if (session.creatorTokenAddress) {
+    distributionTxHash = await distributeRevenueOnChain(
+      session.creatorTokenAddress,
+      session.creatorBalance,
+    );
+  } else {
+    logger.warn(
+      { appSessionId: session.appSessionId },
+      "No creatorTokenAddress — skipping distribution",
+    );
+  }
+
+  logger.info(
+    {
+      appSessionId: session.appSessionId,
+      settlementTxHash,
+      bridgeTxHash,
+      distributionTxHash,
+    },
+    "Settlement complete",
+  );
+
+  return { settlementTxHash, bridgeTxHash, distributionTxHash };
 }

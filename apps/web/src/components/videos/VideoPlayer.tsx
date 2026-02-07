@@ -5,6 +5,7 @@ import Hls from "hls.js";
 import { Loader2, AlertCircle, Play } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { PaymentOverlay } from "./PaymentOverlay";
+import { SettlementSummary } from "./SettlementSummary";
 import { useVideoSession } from "@/hooks/useVideoSession";
 import { useWallet } from "@/components/wallet/WalletProvider";
 import type { VideoDetail } from "@/lib/types";
@@ -28,6 +29,7 @@ export function VideoPlayer({ video }: VideoPlayerProps) {
     signAndRequestKey,
     isYellowCosign,
     ephemeralAddress,
+    settlementResult,
   } = useVideoSession();
   const { walletAddress, isConnected } = useWallet();
   const [playerReady, setPlayerReady] = useState(false);
@@ -217,13 +219,13 @@ export function VideoPlayer({ video }: VideoPlayerProps) {
           <Play className="h-12 w-12 text-white/80" />
           <Button onClick={handleStartWatching} size="lg">
             {isConnected
-              ? "Start Watching (State Channel)"
-              : "Start Watching (Legacy)"}
+              ? "Start Watching"
+              : "Start Watching"}
           </Button>
           <p className="max-w-md text-center text-xs text-muted-foreground">
             {isConnected
-              ? "A co-signed state channel will be created via Yellow Network"
-              : "Connect wallet for pay-per-segment streaming, or watch with legacy session"}
+              ? "Pay-per-second streaming via Yellow Network state channel"
+              : "Connect wallet in the header for pay-per-second micropayments"}
           </p>
         </div>
       )}
@@ -253,8 +255,9 @@ export function VideoPlayer({ video }: VideoPlayerProps) {
 
       {/* Closed state */}
       {sessionState === "closed" && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/60">
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/80 overflow-y-auto p-4">
           <p className="text-sm text-muted-foreground">Session ended</p>
+          {settlementResult && <SettlementSummary result={settlementResult} />}
           <Button onClick={handleStartWatching}>Watch Again</Button>
         </div>
       )}

@@ -38,6 +38,12 @@ const envSchema = z.object({
   YELLOW_ASSET: z.string().default("ytest.usd"),
   YELLOW_PRICE_PER_SEGMENT: z.string().default("0.01"),
 
+  // Base Sepolia (on-chain video registry + bridge escrow)
+  BASE_SEPOLIA_RPC_URL: z.string().url().default("https://sepolia.base.org"),
+  VIDEO_REGISTRY_ADDRESS: z.string().startsWith("0x").optional(),
+  BRIDGE_ESCROW_ADDRESS: z.string().startsWith("0x").optional(),
+  BASE_SEPOLIA_USDC_ADDRESS: z.string().startsWith("0x").default("0x036CbD53842c5426634e7929541eC2318f3dCF7e"),
+
   // Supabase (video storage)
   SUPABASE_URL: z.string().url().optional(),
   SUPABASE_SERVICE_KEY: z.string().min(1).optional(),

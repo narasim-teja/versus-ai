@@ -9,6 +9,7 @@ import {
 } from "@/lib/yellow";
 import { cosignAndGetKey } from "@/lib/api";
 import { config } from "@/lib/config";
+import type { SessionCloseResult } from "@/lib/types";
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -54,6 +55,7 @@ export function useYellowSession() {
   const [status, setStatus] = useState<YellowSessionStatus>("idle");
   const [error, setError] = useState<string | null>(null);
   const [state, setState] = useState<YellowSessionState>(initialState);
+  const [settlementResult, setSettlementResult] = useState<SessionCloseResult | null>(null);
 
   const clientRef = useRef<YellowBrowserClient | null>(null);
   const stateRef = useRef(state);
@@ -237,12 +239,20 @@ export function useYellowSession() {
     setStatus("closing");
     const current = stateRef.current;
 
-    // Close via backend API (best-effort)
+    // Close via backend API and capture settlement result
     if (current.appSessionId) {
-      await fetch(
-        `${config.apiBaseUrl}/api/videos/${videoId}/session/${current.appSessionId}/close`,
-        { method: "POST" }
-      ).catch(() => {});
+      try {
+        const res = await fetch(
+          `${config.apiBaseUrl}/api/videos/${videoId}/session/${current.appSessionId}/close`,
+          { method: "POST" }
+        );
+        if (res.ok) {
+          const closeResult: SessionCloseResult = await res.json();
+          setSettlementResult(closeResult);
+        }
+      } catch {
+        // Best-effort close
+      }
     }
 
     // Disconnect from ClearNode
@@ -260,6 +270,7 @@ export function useYellowSession() {
     status,
     state,
     error,
+    settlementResult,
     startYellowSession,
     signAndRequestKey,
     closeYellowSession,

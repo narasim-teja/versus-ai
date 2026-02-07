@@ -216,6 +216,10 @@ export interface Video {
 
 export interface VideoDetail extends Video {
   merkleRoot: string | null;
+  registryTxHash: string | null;
+  registryExplorerLink: string | null;
+  creatorWallet: string | null;
+  creatorTokenAddress: string | null;
 }
 
 /** Response from POST /api/videos/:videoId/session (legacy path) */
@@ -261,4 +265,13 @@ export interface SessionCloseResult {
   totalPaid: string;
   settled: boolean;
   segmentsDelivered: number;
+  // Cross-chain settlement tx hashes
+  settlementTxHash: string | null;
+  bridgeTxHash: string | null;
+  distributionTxHash: string | null;
+  explorerLinks: {
+    settlement: string | null;
+    bridge: string | null;
+    distribution: string | null;
+  } | null;
 }
