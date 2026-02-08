@@ -14,6 +14,7 @@ import {
   createAllAgentConfigs,
   getRecentDecisions,
   getDecisionHistory,
+  getDecisionCount,
   getLatestDecision,
   forceAgentCycle,
   subscribeToDecisions,
@@ -226,7 +227,10 @@ agents.get("/:id/decisions", async (c) => {
   const limit = Math.min(parseInt(c.req.query("limit") || "20"), 100);
   const offset = parseInt(c.req.query("offset") || "0");
 
-  const decisions = await getDecisionHistory(agentId, limit, offset);
+  const [decisions, totalCount] = await Promise.all([
+    getDecisionHistory(agentId, limit, offset),
+    getDecisionCount(agentId),
+  ]);
 
   return c.json({
     agentId,
@@ -235,6 +239,7 @@ agents.get("/:id/decisions", async (c) => {
       limit,
       offset,
       count: decisions.length,
+      totalCount,
     },
   });
 });

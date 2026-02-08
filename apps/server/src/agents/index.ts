@@ -39,6 +39,7 @@ export {
   subscribeToDecisions,
   getRecentDecisions,
   getDecisionHistory,
+  getDecisionCount,
   getLatestDecision,
   startAgent,
   stopAgent,

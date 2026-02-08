@@ -53,6 +53,26 @@ export async function fetchRecentDecisions(
   return data.decisions;
 }
 
+export interface PaginatedDecisions {
+  decisions: DecisionLog[];
+  pagination: {
+    limit: number;
+    offset: number;
+    count: number;
+    totalCount: number;
+  };
+}
+
+export async function fetchDecisions(
+  agentId: string,
+  limit = 20,
+  offset = 0
+): Promise<PaginatedDecisions> {
+  return fetchJson<PaginatedDecisions>(
+    `/api/agents/${agentId}/decisions?limit=${limit}&offset=${offset}`
+  );
+}
+
 export async function forceCycle(
   id: string
 ): Promise<{ success: boolean; decision: DecisionLog }> {
