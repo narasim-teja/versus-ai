@@ -16,6 +16,7 @@ import {
   initiateBridgeOnChain,
   distributeRevenueOnChain,
 } from "../chain/video-registry";
+import { getBasePublicClient } from "../chain/base-client";
 
 export interface SettlementResult {
   settlementTxHash: string | null; // Base Sepolia - settlement record
@@ -91,6 +92,16 @@ export async function triggerSettlement(
     session.creatorBalance,
     session.appSessionId,
   );
+
+  // Wait for settlement tx to be mined before bridge (same wallet, prevents nonce race)
+  if (settlementTxHash) {
+    try {
+      const publicClient = getBasePublicClient();
+      await publicClient.waitForTransactionReceipt({ hash: settlementTxHash as `0x${string}` });
+    } catch (err) {
+      logger.warn({ err, settlementTxHash }, "Failed to wait for settlement tx receipt (continuing)");
+    }
+  }
 
   // Step 2: Initiate bridge on Base Sepolia (BridgeEscrow → CCTP demo)
   let bridgeTxHash: string | null = null;

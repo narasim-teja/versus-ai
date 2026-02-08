@@ -14,7 +14,7 @@
  */
 
 import type { Address, Hex } from "viem";
-import { parseUnits } from "viem";
+import { parseUnits, type PublicClient } from "viem";
 import {
   StateIntent,
   getChannelId,
@@ -24,7 +24,7 @@ import {
   type Allocation,
 } from "@erc7824/nitrolite";
 import { getNitroliteClient } from "./client";
-import { baseSepolia } from "../chain/base-client";
+import { getBasePublicClient, baseSepolia } from "../chain/base-client";
 import { env } from "../../utils/env";
 import { logger } from "../../utils/logger";
 
@@ -226,6 +226,10 @@ export async function closeCustodyChannel(
       });
 
       logger.info({ channelId, closeTxHash }, "Nitrolite channel closed on-chain");
+
+      // Wait for close tx to be mined before withdrawal (prevents nonce race)
+      const publicClient = getBasePublicClient();
+      await (publicClient as PublicClient).waitForTransactionReceipt({ hash: closeTxHash });
     } catch (err) {
       logger.error({ err, channelId }, "Failed to close Custody channel");
     }
@@ -242,6 +246,11 @@ export async function closeCustodyChannel(
         { withdrawTxHash, amount: totalDeposited.toString() },
         "Funds withdrawn from Custody",
       );
+
+      // Wait for withdrawal tx to be mined before returning (prevents nonce race
+      // with subsequent settlement txs that use the same wallet)
+      const pubClient = getBasePublicClient();
+      await (pubClient as PublicClient).waitForTransactionReceipt({ hash: withdrawTxHash });
     }
   } catch (err) {
     logger.error({ err, channelId }, "Failed to withdraw from Custody");

@@ -2,6 +2,7 @@ import {
   createPublicClient,
   createWalletClient,
   http,
+  nonceManager,
   type Chain,
   type PublicClient,
   type WalletClient,
@@ -60,6 +61,10 @@ export function getBaseWalletClient(): WalletClient<Transport, Chain, Account> |
       return null;
     }
     const account = privateKeyToAccount(privateKey as `0x${string}`);
+    // Use viem's nonceManager to track in-flight nonces locally.
+    // Without this, sequential txs race on the public RPC's stale
+    // eth_getTransactionCount("pending") response, causing "nonce too low".
+    account.nonceManager = nonceManager;
     _baseWalletClient = createWalletClient({
       account,
       chain: baseSepolia,
