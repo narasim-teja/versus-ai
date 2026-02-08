@@ -1,0 +1,15 @@
+[build]
+# Use the server Dockerfile from the monorepo root context
+dockerfilePath = "apps/server/Dockerfile"
+
+[deploy]
+# Health check
+healthcheckPath = "/health"
+healthcheckTimeout = 30
+
+# Start command (already set in Dockerfile CMD)
+# restartPolicyType = "ON_FAILURE"
+# restartPolicyMaxRetries = 3
+
+# Railway will auto-assign PORT via env var
+# The Dockerfile exposes 3001 as default
