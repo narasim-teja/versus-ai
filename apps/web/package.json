@@ -23,6 +23,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "hls.js": "^1.6.15",
+    "lightweight-charts": "^5.1.0",
     "lucide-react": "^0.563.0",
     "next": "14.2.0",
     "react": "^18.3.0",

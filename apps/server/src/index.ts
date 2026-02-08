@@ -32,6 +32,8 @@ import {
   getNitroliteClient,
 } from "./integrations/nitrolite";
 import type { Address } from "viem";
+import { db } from "./db/client";
+import { trades } from "./db/schema";
 
 // Create Hono app
 const app = new Hono();
@@ -197,17 +199,49 @@ async function main() {
     const unwatch = watchBondingCurveEvents(
       config.bondingCurveAddress as Address,
       {
-        onPurchase: (event) => {
+        onPurchase: async (event, log) => {
           logger.info(
             { agentId: config.id, buyer: event.buyer, usdcIn: event.usdcIn.toString() },
             "Token purchase detected on agent's bonding curve"
           );
+          try {
+            await db.insert(trades).values({
+              tokenAddress: config.tokenAddress,
+              bondingCurveAddress: config.bondingCurveAddress,
+              side: "buy",
+              trader: event.buyer,
+              usdcAmount: event.usdcIn.toString(),
+              tokenAmount: event.tokensOut.toString(),
+              price: event.newPrice.toString(),
+              txHash: log.transactionHash ?? null,
+              blockNumber: Number(log.blockNumber ?? 0),
+              timestamp: Date.now(),
+            });
+          } catch (err) {
+            logger.warn({ err }, "Failed to persist trade event");
+          }
         },
-        onSale: (event) => {
+        onSale: async (event, log) => {
           logger.info(
             { agentId: config.id, seller: event.seller, usdcOut: event.usdcOut.toString() },
             "Token sale detected on agent's bonding curve"
           );
+          try {
+            await db.insert(trades).values({
+              tokenAddress: config.tokenAddress,
+              bondingCurveAddress: config.bondingCurveAddress,
+              side: "sell",
+              trader: event.seller,
+              usdcAmount: event.usdcOut.toString(),
+              tokenAmount: event.tokensIn.toString(),
+              price: event.newPrice.toString(),
+              txHash: log.transactionHash ?? null,
+              blockNumber: Number(log.blockNumber ?? 0),
+              timestamp: Date.now(),
+            });
+          } catch (err) {
+            logger.warn({ err }, "Failed to persist trade event");
+          }
         },
         onRevenueClaimed: (event) => {
           logger.info(

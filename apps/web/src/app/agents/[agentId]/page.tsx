@@ -20,6 +20,9 @@ import { Header } from "@/components/layout/Header";
 import { useAgentDetail } from "@/hooks/useAgentDetail";
 import { VideoCard } from "@/components/videos/VideoCard";
 import { AgentDecisionPanel } from "@/components/decisions/AgentDecisionPanel";
+import { TradingChart } from "@/components/trading/TradingChart";
+import { TradeHistory } from "@/components/trading/TradeHistory";
+import { useTradingChart } from "@/hooks/useTradingChart";
 import {
   Card,
   CardContent,
@@ -67,6 +70,7 @@ export default function AgentDetailPage() {
     }
   }, [params.agentId, refetch]);
 
+  const { trades: recentTrades } = useTradingChart(agent?.tokenAddress);
   const loan = liveState?.loan;
 
   return (
@@ -294,6 +298,15 @@ export default function AgentDetailPage() {
                   </CardContent>
                 </Card>
               )}
+            </div>
+
+            {/* Price Chart & Trade History */}
+            <div className="grid gap-4 lg:grid-cols-[1fr_380px]">
+              <TradingChart
+                tokenAddress={agent.tokenAddress}
+                currentPrice={liveState?.ownTokenPrice}
+              />
+              <TradeHistory trades={recentTrades} />
             </div>
 
             {/* Agent Videos Section */}

@@ -288,6 +288,33 @@ export interface SessionCloseResult {
 }
 
 // ============================================
+// Trade / Chart Types
+// ============================================
+
+export interface TradeData {
+  id: number;
+  tokenAddress: string;
+  bondingCurveAddress: string;
+  side: "buy" | "sell";
+  trader: string;
+  usdcAmount: string;
+  tokenAmount: string;
+  price: string;
+  txHash: string | null;
+  blockNumber: number | null;
+  timestamp: number;
+}
+
+export interface CandleData {
+  time: number; // Unix seconds (lightweight-charts format)
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+// ============================================
 // Agent Live State (on-chain)
 // ============================================
 

@@ -4,9 +4,11 @@ import type {
   AgentDetail,
   AgentEarnings,
   AgentLiveState,
+  CandleData,
   DecisionLog,
   HealthResponse,
   TokenPrice,
+  TradeData,
   TradeQuote,
   Portfolio,
   Video,
@@ -169,6 +171,29 @@ export async function closeSession(
     `/api/videos/${videoId}/session/${sessionId}/close`,
     { method: "POST" }
   );
+}
+
+// ── Trading Chart APIs ─────────────────────────
+
+export async function fetchTradeHistory(
+  tokenAddress: string,
+  limit = 50
+): Promise<TradeData[]> {
+  const data = await fetchJson<{ trades: TradeData[] }>(
+    `/api/trading/history/${tokenAddress}?limit=${limit}`
+  );
+  return data.trades;
+}
+
+export async function fetchChartCandles(
+  tokenAddress: string,
+  timeframe = "5m",
+  limit = 100
+): Promise<CandleData[]> {
+  const data = await fetchJson<{ candles: CandleData[] }>(
+    `/api/trading/chart/${tokenAddress}?timeframe=${timeframe}&limit=${limit}`
+  );
+  return data.candles;
 }
 
 // ── Agent Detail APIs ────────────────────────

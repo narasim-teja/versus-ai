@@ -276,6 +276,30 @@ export const yellowSessionsRelations = relations(
   })
 );
 
+/**
+ * Trades - on-chain buy/sell events from bonding curves for chart data
+ */
+export const trades = pgTable(
+  "trades",
+  {
+    id: serial("id").primaryKey(),
+    tokenAddress: text("token_address").notNull(),
+    bondingCurveAddress: text("bonding_curve_address").notNull(),
+    side: text("side").notNull(), // 'buy' | 'sell'
+    trader: text("trader").notNull(),
+    usdcAmount: text("usdc_amount").notNull(), // BigInt string (6 decimals)
+    tokenAmount: text("token_amount").notNull(), // BigInt string (18 decimals)
+    price: text("price").notNull(), // newPrice from event (6 decimals)
+    txHash: text("tx_hash"),
+    blockNumber: integer("block_number"),
+    timestamp: bigint("timestamp", { mode: "number" }).notNull(), // Unix ms
+  },
+  (table) => ({
+    tokenAddressIdx: index("idx_trades_token").on(table.tokenAddress),
+    timestampIdx: index("idx_trades_timestamp").on(table.timestamp),
+  })
+);
+
 // Type exports
 export type Agent = typeof agents.$inferSelect;
 export type NewAgent = typeof agents.$inferInsert;
@@ -291,3 +315,5 @@ export type ViewerSession = typeof viewerSessions.$inferSelect;
 export type NewViewerSession = typeof viewerSessions.$inferInsert;
 export type YellowSession = typeof yellowSessions.$inferSelect;
 export type NewYellowSession = typeof yellowSessions.$inferInsert;
+export type Trade = typeof trades.$inferSelect;
+export type NewTrade = typeof trades.$inferInsert;

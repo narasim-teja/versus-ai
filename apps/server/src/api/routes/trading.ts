@@ -7,6 +7,7 @@
 
 import { Hono } from "hono";
 import { getAddress, type Address } from "viem";
+import { desc, eq, and, gte } from "drizzle-orm";
 import { createAllAgentConfigs } from "../../agents";
 import {
   getBondingCurve,
@@ -15,6 +16,8 @@ import {
   addresses,
 } from "../../integrations/chain";
 import { createContractExecutionChallenge } from "../../integrations/circle/user-wallets";
+import { db } from "../../db/client";
+import { trades } from "../../db/schema";
 import { logger } from "../../utils/logger";
 
 const trading = new Hono();
@@ -350,6 +353,154 @@ trading.get("/allowance", async (c) => {
   } catch (error) {
     logger.error({ tokenAddress, owner, spender, error }, "Failed to check allowance");
     return c.json({ error: "Failed to check allowance" }, 500);
+  }
+});
+
+/**
+ * GET /api/trading/history/:tokenAddress
+ *
+ * Get recent trade events for a token's bonding curve.
+ * Query params: limit (default 50), from (unix ms, optional)
+ */
+trading.get("/history/:tokenAddress", async (c) => {
+  const tokenAddress = c.req.param("tokenAddress");
+  const limit = Math.min(Number(c.req.query("limit") || 50), 200);
+  const from = c.req.query("from");
+
+  try {
+    const conditions = [eq(trades.tokenAddress, tokenAddress)];
+    if (from) {
+      conditions.push(gte(trades.timestamp, Number(from)));
+    }
+
+    const rows = await db
+      .select()
+      .from(trades)
+      .where(and(...conditions))
+      .orderBy(desc(trades.timestamp))
+      .limit(limit);
+
+    return c.json({ trades: rows });
+  } catch (error) {
+    logger.error({ tokenAddress, error }, "Failed to fetch trade history");
+    return c.json({ error: "Failed to fetch trade history" }, 500);
+  }
+});
+
+/**
+ * GET /api/trading/chart/:tokenAddress
+ *
+ * Get OHLCV candle data for charting.
+ * Query params: timeframe (1m, 5m, 15m, 1h — default 5m), limit (default 100)
+ */
+trading.get("/chart/:tokenAddress", async (c) => {
+  const tokenAddress = c.req.param("tokenAddress");
+  const timeframe = c.req.query("timeframe") || "5m";
+  const limit = Math.min(Number(c.req.query("limit") || 100), 500);
+
+  const tfMs: Record<string, number> = {
+    "1m": 60_000,
+    "5m": 300_000,
+    "15m": 900_000,
+    "1h": 3_600_000,
+  };
+  const bucketMs = tfMs[timeframe] || 300_000;
+
+  try {
+    // Fetch trades for the time window
+    const windowMs = bucketMs * limit;
+    const fromTs = Date.now() - windowMs;
+
+    const rows = await db
+      .select()
+      .from(trades)
+      .where(
+        and(
+          eq(trades.tokenAddress, tokenAddress),
+          gte(trades.timestamp, fromTs)
+        )
+      )
+      .orderBy(trades.timestamp);
+
+    if (rows.length === 0) {
+      // Fallback: get current on-chain price as a single data point
+      const configs = createAllAgentConfigs();
+      const config = configs.find(
+        (cfg) => cfg.tokenAddress.toLowerCase() === tokenAddress.toLowerCase()
+      );
+      if (config) {
+        const bc = getBondingCurve(config.bondingCurveAddress as Address);
+        const price = await bc.read.getPrice();
+        const priceNum = Number(price) / 1e6;
+        const now = Math.floor(Date.now() / 1000);
+        return c.json({
+          candles: [
+            { time: now, open: priceNum, high: priceNum, low: priceNum, close: priceNum, volume: 0 },
+          ],
+        });
+      }
+      return c.json({ candles: [] });
+    }
+
+    // Build candles from trades
+    const candles: Array<{
+      time: number;
+      open: number;
+      high: number;
+      low: number;
+      close: number;
+      volume: number;
+    }> = [];
+
+    const firstTradeTs = rows[0].timestamp;
+    const bucketStart = Math.floor(firstTradeTs / bucketMs) * bucketMs;
+    const lastTradeTs = rows[rows.length - 1].timestamp;
+    const bucketEnd = Math.floor(lastTradeTs / bucketMs) * bucketMs + bucketMs;
+
+    let lastClose = Number(rows[0].price) / 1e6;
+
+    for (let ts = bucketStart; ts < bucketEnd; ts += bucketMs) {
+      const bucketTrades = rows.filter(
+        (t) => t.timestamp >= ts && t.timestamp < ts + bucketMs
+      );
+
+      if (bucketTrades.length === 0) {
+        // Carry forward
+        candles.push({
+          time: Math.floor(ts / 1000),
+          open: lastClose,
+          high: lastClose,
+          low: lastClose,
+          close: lastClose,
+          volume: 0,
+        });
+      } else {
+        const prices = bucketTrades.map((t) => Number(t.price) / 1e6);
+        const volume = bucketTrades.reduce(
+          (sum, t) => sum + Number(t.usdcAmount) / 1e6,
+          0
+        );
+        const open = prices[0];
+        const close = prices[prices.length - 1];
+        const high = Math.max(...prices);
+        const low = Math.min(...prices);
+        lastClose = close;
+
+        candles.push({
+          time: Math.floor(ts / 1000),
+          open,
+          high,
+          low,
+          close,
+          volume,
+        });
+      }
+    }
+
+    return c.json({ candles });
+  } catch (error) {
+    logger.error({ tokenAddress, error }, "Failed to build chart data");
+    return c.json({ error: "Failed to build chart data" }, 500);
   }
 });
 
