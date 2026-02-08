@@ -19,6 +19,7 @@ import { useCallback, useState } from "react";
 import { Header } from "@/components/layout/Header";
 import { useAgentDetail } from "@/hooks/useAgentDetail";
 import { VideoCard } from "@/components/videos/VideoCard";
+import { VideoScheduleCard } from "@/components/videos/VideoScheduleCard";
 import { AgentDecisionPanel } from "@/components/decisions/AgentDecisionPanel";
 import { TradingChart } from "@/components/trading/TradingChart";
 import { TradeHistory } from "@/components/trading/TradeHistory";
@@ -54,7 +55,7 @@ const strategyStyles = {
 export default function AgentDetailPage() {
   const params = useParams<{ agentId: string }>();
   const router = useRouter();
-  const { agent, liveState, videos, earnings, isLoading, error, refetch } =
+  const { agent, liveState, videos, earnings, schedule, isLoading, error, refetch } =
     useAgentDetail(params.agentId);
   const [forcing, setForcing] = useState(false);
 
@@ -297,6 +298,11 @@ export default function AgentDetailPage() {
                     />
                   </CardContent>
                 </Card>
+              )}
+
+              {/* Video Generation Schedule */}
+              {schedule && (
+                <VideoScheduleCard schedule={schedule} />
               )}
             </div>
 

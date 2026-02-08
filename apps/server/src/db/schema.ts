@@ -128,6 +128,7 @@ export const agentsRelations = relations(agents, ({ many, one }) => ({
     fields: [agents.id],
     references: [circleWallets.agentId],
   }),
+  videoGenerations: many(videoGenerations),
 }));
 
 export const decisionLogsRelations = relations(decisionLogs, ({ one }) => ({
@@ -300,6 +301,54 @@ export const trades = pgTable(
   })
 );
 
+/**
+ * Video Generations - tracks autonomous video generation lifecycle
+ */
+export const videoGenerations = pgTable(
+  "video_generations",
+  {
+    id: serial("id").primaryKey(),
+    agentId: text("agent_id")
+      .notNull()
+      .references(() => agents.id),
+    status: text("status").notNull().default("pending"),
+    // Ideation outputs
+    title: text("title"),
+    description: text("description"),
+    videoPrompt: text("video_prompt"),
+    thumbnailPrompt: text("thumbnail_prompt"),
+    duration: integer("duration"),
+    // Generation results
+    videoId: text("video_id").references(() => videos.id),
+    sizeBytes: integer("size_bytes"),
+    costEstimate: text("cost_estimate"),
+    error: text("error"),
+    // Timestamps
+    startedAt: timestamp("started_at").notNull(),
+    completedAt: timestamp("completed_at"),
+    updatedAt: timestamp("updated_at").defaultNow(),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => ({
+    agentIdIdx: index("idx_video_generations_agent_id").on(table.agentId),
+    statusIdx: index("idx_video_generations_status").on(table.status),
+  })
+);
+
+export const videoGenerationsRelations = relations(
+  videoGenerations,
+  ({ one }) => ({
+    agent: one(agents, {
+      fields: [videoGenerations.agentId],
+      references: [agents.id],
+    }),
+    video: one(videos, {
+      fields: [videoGenerations.videoId],
+      references: [videos.id],
+    }),
+  })
+);
+
 // Type exports
 export type Agent = typeof agents.$inferSelect;
 export type NewAgent = typeof agents.$inferInsert;
@@ -317,3 +366,5 @@ export type YellowSession = typeof yellowSessions.$inferSelect;
 export type NewYellowSession = typeof yellowSessions.$inferInsert;
 export type Trade = typeof trades.$inferSelect;
 export type NewTrade = typeof trades.$inferInsert;
+export type VideoGeneration = typeof videoGenerations.$inferSelect;
+export type NewVideoGeneration = typeof videoGenerations.$inferInsert;

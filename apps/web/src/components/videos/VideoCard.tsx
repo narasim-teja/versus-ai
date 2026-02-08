@@ -36,9 +36,18 @@ export function VideoCard({ video }: VideoCardProps) {
           : "cursor-not-allowed opacity-60"
       )}
     >
-      {/* Thumbnail placeholder */}
-      <div className="relative flex h-40 items-center justify-center rounded-t-xl bg-muted">
-        <Film className="h-10 w-10 text-muted-foreground/50" />
+      {/* Thumbnail */}
+      <div className="relative flex h-40 items-center justify-center rounded-t-xl bg-muted overflow-hidden">
+        {video.thumbnailUri ? (
+          <img
+            src={video.thumbnailUri}
+            alt={video.title}
+            className="h-full w-full object-cover"
+            loading="lazy"
+          />
+        ) : (
+          <Film className="h-10 w-10 text-muted-foreground/50" />
+        )}
         {isReady && (
           <div className="absolute inset-0 flex items-center justify-center rounded-t-xl bg-black/0 transition-colors group-hover:bg-black/30">
             <Play className="h-8 w-8 text-white opacity-0 transition-opacity group-hover:opacity-100" />

@@ -8,6 +8,13 @@
       "when": 1770487190917,
       "tag": "0000_absurd_joystick",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1770545651505,
+      "tag": "0001_bitter_zemo",
+      "breakpoints": true
     }
   ]
 }

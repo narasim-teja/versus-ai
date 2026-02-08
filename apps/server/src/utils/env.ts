@@ -55,6 +55,16 @@ const envSchema = z.object({
   SUPABASE_SERVICE_KEY: z.string().min(1).optional(),
   SUPABASE_STORAGE_BUCKET: z.string().default("videos"),
 
+  // LTX-2 Video Generation (autonomous video creation)
+  LTX_API_KEY: z.string().min(1).optional(),
+
+  // Gemini Image Generation (video thumbnails)
+  GEMINI_API_KEY: z.string().min(1).optional(),
+
+  // Video Generation Schedule
+  VIDEO_GEN_INTERVAL_MS: z.coerce.number().default(14_400_000), // 4 hours
+  VIDEO_GEN_OFFSET_MS: z.coerce.number().default(7_200_000),    // 2 hour stagger
+
   // Video processing
   VIDEO_SEGMENT_DURATION: z.coerce.number().default(5),
   VIDEO_QUALITY: z.string().default("720p"),

@@ -348,3 +348,31 @@ export interface AgentEarnings {
   closedSessions: number;
   totalSegmentsDelivered: number;
 }
+
+// ============================================
+// Video Schedule Types
+// ============================================
+
+export type VideoGenerationStatus =
+  | "pending"
+  | "ideating"
+  | "generating_video"
+  | "generating_thumbnail"
+  | "processing"
+  | "uploading"
+  | "completed"
+  | "failed";
+
+export interface VideoScheduleStatus {
+  agentId: string;
+  nextGenerationAt: string;
+  msUntilNext: number;
+  lastGenerationStatus: VideoGenerationStatus | null;
+  lastGenerationVideoId: string | null;
+  lastGenerationTitle: string | null;
+  lastGenerationAt: string | null;
+  currentGenerationStatus: VideoGenerationStatus | null;
+  isGenerating: boolean;
+  generationCount: number;
+  isEnabled: boolean;
+}

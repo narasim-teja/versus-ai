@@ -13,6 +13,7 @@ import type {
   Portfolio,
   Video,
   VideoDetail,
+  VideoScheduleStatus,
   ViewingSession,
   SessionStatus,
   SessionCloseResult,
@@ -215,6 +216,12 @@ export async function fetchAgentEarnings(
   agentId: string
 ): Promise<AgentEarnings> {
   return fetchJson<AgentEarnings>(`/api/agents/${agentId}/earnings`);
+}
+
+export async function fetchAgentSchedule(
+  agentId: string
+): Promise<VideoScheduleStatus> {
+  return fetchJson<VideoScheduleStatus>(`/api/agents/${agentId}/schedule`);
 }
 
 /** Result from cosign including optional merkle proof */

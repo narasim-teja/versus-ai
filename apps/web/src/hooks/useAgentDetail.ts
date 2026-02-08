@@ -6,6 +6,7 @@ import {
   fetchAgentLiveState,
   fetchAgentVideos,
   fetchAgentEarnings,
+  fetchAgentSchedule,
   fetchRecentDecisions,
 } from "@/lib/api";
 import type {
@@ -13,6 +14,7 @@ import type {
   AgentLiveState,
   Video,
   AgentEarnings,
+  VideoScheduleStatus,
   DecisionLog,
 } from "@/lib/types";
 
@@ -21,24 +23,27 @@ export function useAgentDetail(agentId: string, refreshInterval = 10000) {
   const [liveState, setLiveState] = useState<AgentLiveState | null>(null);
   const [videos, setVideos] = useState<Video[]>([]);
   const [earnings, setEarnings] = useState<AgentEarnings | null>(null);
+  const [schedule, setSchedule] = useState<VideoScheduleStatus | null>(null);
   const [decisions, setDecisions] = useState<DecisionLog[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const [agentData, stateData, videosData, earningsData, decisionsData] =
+      const [agentData, stateData, videosData, earningsData, scheduleData, decisionsData] =
         await Promise.all([
           fetchAgent(agentId),
           fetchAgentLiveState(agentId),
           fetchAgentVideos(agentId),
           fetchAgentEarnings(agentId),
+          fetchAgentSchedule(agentId),
           fetchRecentDecisions(agentId, 20),
         ]);
       setAgent(agentData);
       setLiveState(stateData);
       setVideos(videosData);
       setEarnings(earningsData);
+      setSchedule(scheduleData);
       setDecisions(decisionsData);
       setError(null);
     } catch (e) {
@@ -54,12 +59,13 @@ export function useAgentDetail(agentId: string, refreshInterval = 10000) {
     let mounted = true;
     const doLoad = async () => {
       try {
-        const [agentData, stateData, videosData, earningsData, decisionsData] =
+        const [agentData, stateData, videosData, earningsData, scheduleData, decisionsData] =
           await Promise.all([
             fetchAgent(agentId),
             fetchAgentLiveState(agentId),
             fetchAgentVideos(agentId),
             fetchAgentEarnings(agentId),
+            fetchAgentSchedule(agentId),
             fetchRecentDecisions(agentId, 20),
           ]);
         if (mounted) {
@@ -67,6 +73,7 @@ export function useAgentDetail(agentId: string, refreshInterval = 10000) {
           setLiveState(stateData);
           setVideos(videosData);
           setEarnings(earningsData);
+          setSchedule(scheduleData);
           setDecisions(decisionsData);
           setError(null);
         }
@@ -88,5 +95,5 @@ export function useAgentDetail(agentId: string, refreshInterval = 10000) {
     };
   }, [agentId, refreshInterval]);
 
-  return { agent, liveState, videos, earnings, decisions, isLoading, error, refetch: load };
+  return { agent, liveState, videos, earnings, schedule, decisions, isLoading, error, refetch: load };
 }

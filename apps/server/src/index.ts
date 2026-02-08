@@ -15,8 +15,9 @@ import { logger as honoLogger } from "hono/logger";
 import { env } from "./utils/env";
 import { logger } from "./utils/logger";
 import { initializeDatabase, closeDatabase } from "./db/client";
-import { healthRoutes, agentRoutes, agentsWebsocket, videoRoutes, streamingRoutes, authRoutes, tradingRoutes } from "./api/routes";
+import { healthRoutes, agentRoutes, agentsWebsocket, videoRoutes, streamingRoutes, authRoutes, tradingRoutes, scheduleRoutes } from "./api/routes";
 import { createAllAgentConfigs, startAllAgents, stopAllAgents } from "./agents";
+import { startVideoScheduler, stopVideoScheduler } from "./agents/content";
 import { seedAgents, initializeAgentWallets } from "./agents/init";
 import {
   watchBondingCurveEvents,
@@ -54,6 +55,7 @@ app.route("/api/videos", videoRoutes);
 app.route("/api/videos", streamingRoutes);
 app.route("/api/auth", authRoutes);
 app.route("/api/trading", tradingRoutes);
+app.route("/api/agents", scheduleRoutes);
 
 // Root endpoint
 app.get("/", (c) => {
@@ -75,6 +77,9 @@ app.get("/", (c) => {
       videoSession: "/api/videos/:videoId/session",
       sessionClose: "/api/videos/:videoId/session/:sessionId/close",
       sessionStatus: "/api/videos/:videoId/session/:sessionId/status",
+      agentSchedule: "/api/agents/:id/schedule",
+      allSchedules: "/api/agents/schedules",
+      forceGenerate: "/api/agents/:id/generate",
     },
   });
 });
@@ -97,6 +102,7 @@ const eventUnwatchers: Array<() => void> = [];
 function setupShutdownHandler() {
   const shutdown = async () => {
     logger.info("Shutdown signal received, stopping agents...");
+    stopVideoScheduler();
     stopAllAgents();
     // Stop event watchers
     for (const unwatch of eventUnwatchers) {
@@ -193,6 +199,10 @@ async function main() {
   // Start agents (30 second cycle interval)
   startAllAgents(agentConfigs, 30_000);
   logger.info("Agent loops started");
+
+  // Start video generation scheduler (after agents are initialized with wallets)
+  await startVideoScheduler(agentConfigs);
+  logger.info("Video generation scheduler started");
 
   // Start on-chain event watchers for each agent's bonding curve
   for (const config of agentConfigs) {
