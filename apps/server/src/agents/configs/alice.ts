@@ -17,30 +17,30 @@ const USDC_DECIMALS = 6;
 const toUsdc = (amount: number) => BigInt(amount * 10 ** USDC_DECIMALS);
 
 const aliceStrategy: StrategyConfig = {
-  // Treasury management - conservative
-  minTreasuryBuffer: toUsdc(100), // Keep at least 100 USDC
-  targetTreasuryBuffer: toUsdc(500), // Ideal balance is 500 USDC
+  // Treasury management - tuned for ~$20 testnet budget
+  minTreasuryBuffer: toUsdc(2), // Keep at least 2 USDC
+  targetTreasuryBuffer: toUsdc(5), // Ideal balance is 5 USDC
 
-  // Lending - cautious
+  // Lending - cautious but accessible
   maxLTV: 50, // Never exceed 50% LTV
-  borrowTrigger: toUsdc(50), // Consider borrowing when below 50 USDC
-  repayTrigger: toUsdc(1000), // Repay loans when treasury > 1000 USDC
+  borrowTrigger: toUsdc(2), // Consider borrowing when below 2 USDC
+  repayTrigger: toUsdc(30), // Repay loans when treasury > 30 USDC
 
-  // Speculation - minimal
-  speculationBudget: 0.2, // Only use 20% of excess for trading
+  // Speculation - moderate (academic still conservative relative to Bob)
+  speculationBudget: 0.5, // Use 50% of excess for trading
 
-  // Buy signals - need strong evidence
+  // Buy signals - lower thresholds for activity
   buySignals: {
-    revenueGrowth: 0.15, // Need 15%+ revenue growth
-    priceDropWithRevenue: 0.20, // 20% dip with sustained revenue
-    momentum: 0.1, // Low momentum threshold
+    revenueGrowth: 0.02, // Need 2%+ revenue growth
+    priceDropWithRevenue: 0.05, // 5% dip with sustained revenue
+    momentum: 0.02, // Low momentum threshold
   },
 
   // Sell signals - protect gains, cut losses
   sellSignals: {
-    revenueDrop: 0.25, // Sell if revenue drops 25%
-    priceDrop: 0.15, // Stop loss at 15% drop
-    profitTake: 0.50, // Take profit at 50% gain
+    revenueDrop: 0.10, // Sell if revenue drops 10%
+    priceDrop: 0.10, // Stop loss at 10% drop
+    profitTake: 0.25, // Take profit at 25% gain
   },
 };
 

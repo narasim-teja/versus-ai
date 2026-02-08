@@ -325,11 +325,10 @@ async function readOtherCreators(
       const bondingCurve = getBondingCurve(bondingCurveAddress);
       const token = getERC20(tokenAddress);
 
-      const [price, totalSupply, pendingRevenue] = await Promise.all([
-        bondingCurve.read.getPrice(),
-        token.read.totalSupply(),
-        bondingCurve.read.earned([creatorWallet]),
-      ]);
+      // Sequential to avoid RPC rate limits
+      const price = await bondingCurve.read.getPrice();
+      const totalSupply = await token.read.totalSupply();
+      const pendingRevenue = await bondingCurve.read.earned([creatorWallet]);
 
       otherCreators.push({
         creatorAddress: creatorWallet,
@@ -362,22 +361,13 @@ export async function readAgentState(config: AgentConfig, pendingTxs: string[] =
   logger.debug({ agentId: config.id, cycle }, "Reading agent state");
 
   try {
-    // Parallel reads for efficiency
-    const [
-      ownTokenData,
-      usdcBalance,
-      loanInfo,
-      holdings,
-      marketSentiment,
-      otherCreators,
-    ] = await Promise.all([
-      readOwnTokenData(config),
-      readUsdcBalance(config.id, config.evmAddress),
-      readLoanInfo(config.evmAddress),
-      readHoldings(config),
-      getMarketSentiment(),
-      readOtherCreators(config.evmAddress),
-    ]);
+    // Sequential reads to avoid ARC testnet RPC rate limit (20 req/s)
+    const ownTokenData = await readOwnTokenData(config);
+    const usdcBalance = await readUsdcBalance(config.id, config.evmAddress);
+    const loanInfo = await readLoanInfo(config.evmAddress);
+    const marketSentiment = await getMarketSentiment(); // REST API, no RPC
+    const holdings = await readHoldings(config);
+    const otherCreators = await readOtherCreators(config.evmAddress);
 
     const state: AgentState = {
       timestamp,

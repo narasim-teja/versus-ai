@@ -17,30 +17,30 @@ const USDC_DECIMALS = 6;
 const toUsdc = (amount: number) => BigInt(amount * 10 ** USDC_DECIMALS);
 
 const bobStrategy: StrategyConfig = {
-  // Treasury management - aggressive
-  minTreasuryBuffer: toUsdc(25), // Keep only 25 USDC minimum
-  targetTreasuryBuffer: toUsdc(100), // Ideal balance is 100 USDC
+  // Treasury management - tuned for ~$20 testnet budget, ultra aggressive
+  minTreasuryBuffer: toUsdc(1), // Keep only 1 USDC minimum
+  targetTreasuryBuffer: toUsdc(3), // Ideal balance is 3 USDC
 
-  // Lending - leveraged
+  // Lending - max leverage
   maxLTV: 65, // Push up to 65% LTV
-  borrowTrigger: toUsdc(25), // Quick to borrow when below 25 USDC
-  repayTrigger: toUsdc(500), // Only repay when treasury > 500 USDC
+  borrowTrigger: toUsdc(1), // Quick to borrow when below 1 USDC
+  repayTrigger: toUsdc(20), // Only repay when treasury > 20 USDC
 
-  // Speculation - aggressive
-  speculationBudget: 0.5, // Use 50% of excess for trading
+  // Speculation - full degen
+  speculationBudget: 0.8, // Use 80% of excess for trading
 
-  // Buy signals - act on weak signals
+  // Buy signals - act on anything
   buySignals: {
-    revenueGrowth: 0.05, // Only need 5% revenue growth
-    priceDropWithRevenue: 0.10, // Buy 10% dips
-    momentum: 0.05, // Very low momentum threshold
+    revenueGrowth: 0.01, // Only need 1% revenue growth
+    priceDropWithRevenue: 0.03, // Buy 3% dips
+    momentum: 0.01, // Ultra low momentum threshold
   },
 
   // Sell signals - hold longer, bigger swings
   sellSignals: {
-    revenueDrop: 0.40, // Hold through 40% revenue drop
-    priceDrop: 0.25, // Wide stop loss at 25%
-    profitTake: 0.30, // Take profit earlier at 30%
+    revenueDrop: 0.30, // Hold through 30% revenue drop
+    priceDrop: 0.20, // Wide stop loss at 20%
+    profitTake: 0.15, // Take profit earlier at 15%
   },
 };
 

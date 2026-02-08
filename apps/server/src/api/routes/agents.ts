@@ -24,6 +24,7 @@ import { videos, yellowSessions } from "../../db/schema";
 import { eq, desc, inArray } from "drizzle-orm";
 import { logger } from "../../utils/logger";
 import { getBondingCurve, getUSDC, getLendingPool, getERC20 } from "../../integrations/chain/contracts";
+import { getMarketSentiment } from "../../integrations/stork";
 import type { Address } from "viem";
 
 const agents = new Hono();

@@ -353,8 +353,20 @@ function getInvalidReason(
       // Don't allow spending below minimum treasury buffer
       if (state.usdcBalance - params.usdcAmount < config.strategy.minTreasuryBuffer)
         return "Would breach minimum treasury buffer";
-      if (!params.tokenAddress || !params.bondingCurveAddress)
-        return "Missing token or bonding curve address";
+      if (!params.tokenAddress)
+        return "Missing token address";
+      // Fix zero/missing bondingCurveAddress: look up from state.otherCreators
+      const ZERO_ADDR = "0x0000000000000000000000000000000000000000";
+      if (!params.bondingCurveAddress || params.bondingCurveAddress.toLowerCase() === ZERO_ADDR) {
+        const creator = state.otherCreators.find(
+          (c) => c.tokenAddress.toLowerCase() === params.tokenAddress.toLowerCase()
+        );
+        if (creator) {
+          (action.params as BuyTokenParams).bondingCurveAddress = creator.bondingCurveAddress;
+        } else {
+          return "Bonding curve address is zero and token not found in other creators";
+        }
+      }
       return null;
     }
 
@@ -367,6 +379,11 @@ function getInvalidReason(
       if (!holding) return `No holding found for token ${params.tokenAddress}`;
       if (params.tokenAmount > holding.balance)
         return `Insufficient tokens: need ${params.tokenAmount}, have ${holding.balance}`;
+      // Fix zero/missing bondingCurveAddress: look up from holding
+      const ZERO_ADDR_SELL = "0x0000000000000000000000000000000000000000";
+      if (!params.bondingCurveAddress || params.bondingCurveAddress.toLowerCase() === ZERO_ADDR_SELL) {
+        (action.params as SellTokenParams).bondingCurveAddress = holding.bondingCurveAddress;
+      }
       return null;
     }
 

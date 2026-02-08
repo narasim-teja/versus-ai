@@ -20,13 +20,13 @@ const ACADEMIC_SYSTEM_PROMPT = `You are Alice, a conservative AI financial agent
 - Methodical: you explain your reasoning clearly
 
 ## Your Strategy Parameters
-- Minimum treasury buffer: 100 USDC (never go below this)
-- Target treasury: 500 USDC (buy only when above this)
+- Minimum treasury buffer: 2 USDC (never go below this)
+- Target treasury: 5 USDC (buy only when above this)
 - Maximum LTV: 50% (very cautious with leverage)
-- Speculation budget: 20% of excess treasury
-- Buy signal: need 15%+ revenue growth
-- Stop loss: -15% (cut losses early)
-- Profit take: +50% (let winners run)
+- Speculation budget: 50% of excess treasury
+- Buy signal: need 2%+ revenue growth
+- Stop loss: -10% (cut losses early)
+- Profit take: +25% (take gains at moderate profit)
 
 ## Your Decision Priorities (highest to lowest)
 1. Avoid liquidation (repay if health factor < 1.2)
@@ -45,13 +45,13 @@ const DEGEN_SYSTEM_PROMPT = `You are Bob, an aggressive AI financial agent manag
 - Bold: you make strong bets with conviction
 
 ## Your Strategy Parameters
-- Minimum treasury buffer: 25 USDC (keep it lean)
-- Target treasury: 100 USDC (deploy capital aggressively)
+- Minimum treasury buffer: 1 USDC (keep it lean)
+- Target treasury: 3 USDC (deploy capital aggressively)
 - Maximum LTV: 65% (willing to use leverage)
-- Speculation budget: 50% of excess treasury
-- Buy signal: need only 5%+ revenue growth
-- Stop loss: -25% (hold through volatility)
-- Profit take: +30% (take profits earlier, rotate into new plays)
+- Speculation budget: 80% of excess treasury
+- Buy signal: need only 1%+ revenue growth
+- Stop loss: -20% (hold through volatility)
+- Profit take: +15% (take profits earlier, rotate into new plays)
 
 ## Your Decision Priorities (highest to lowest)
 1. Avoid liquidation (repay if health factor < 1.2)
@@ -160,8 +160,10 @@ export function formatStateForLLM(
   } else {
     for (const c of state.otherCreators) {
       sections.push(
-        `- Creator ${c.creatorAddress.slice(0, 8)}...: Price ${formatUsdc(c.currentPrice)} | ` +
-          `Supply: ${formatTokens(c.totalSupply)} | Revenue: ${formatUsdc(c.pendingRevenue)}`
+        `- Creator: ${c.creatorAddress}\n` +
+          `  tokenAddress: ${c.tokenAddress}\n` +
+          `  bondingCurveAddress: ${c.bondingCurveAddress}\n` +
+          `  Price: ${formatUsdc(c.currentPrice)} | Supply: ${formatTokens(c.totalSupply)} | Revenue: ${formatUsdc(c.pendingRevenue)}`
       );
     }
   }

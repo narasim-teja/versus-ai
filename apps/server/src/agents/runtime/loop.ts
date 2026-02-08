@@ -18,8 +18,8 @@ import { llmDecide } from "./llm-decide";
 import { logDecision, logExecutionResults } from "./logger";
 import { executeActions } from "./execute";
 
-// Default cycle interval: 30 seconds
-const DEFAULT_CYCLE_INTERVAL_MS = 30_000;
+// Default cycle interval: 15 seconds (faster for demo)
+const DEFAULT_CYCLE_INTERVAL_MS = 15_000;
 
 // Agent runtime instances
 const agentRuntimes = new Map<string, AgentRuntime>();
@@ -312,7 +312,7 @@ export async function forceAgentCycle(
 }
 
 /**
- * Start all agents
+ * Start all agents (staggered to avoid RPC rate limits)
  */
 export function startAllAgents(
   configs: AgentConfig[],
@@ -320,8 +320,18 @@ export function startAllAgents(
 ): void {
   logger.info({ count: configs.length }, "Starting all agents");
 
-  for (const config of configs) {
-    startAgent(config, cycleIntervalMs);
+  const interval = cycleIntervalMs || DEFAULT_CYCLE_INTERVAL_MS;
+  const staggerMs = Math.floor(interval / configs.length);
+
+  for (let i = 0; i < configs.length; i++) {
+    if (i === 0) {
+      startAgent(configs[i], cycleIntervalMs);
+    } else {
+      // Stagger subsequent agents to spread RPC load
+      const delay = staggerMs * i;
+      logger.info({ agentId: configs[i].id, delayMs: delay }, "Staggering agent start");
+      setTimeout(() => startAgent(configs[i], cycleIntervalMs), delay);
+    }
   }
 }
 
