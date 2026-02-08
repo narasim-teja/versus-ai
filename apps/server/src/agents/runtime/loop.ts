@@ -18,8 +18,11 @@ import { llmDecide } from "./llm-decide";
 import { logDecision, logExecutionResults } from "./logger";
 import { executeActions } from "./execute";
 
-// Default cycle interval: 15 seconds (faster for demo)
-const DEFAULT_CYCLE_INTERVAL_MS = 15_000;
+// Default cycle interval: 30 minutes for prod, configurable via AGENT_CYCLE_INTERVAL_MS env var
+const DEFAULT_CYCLE_INTERVAL_MS = parseInt(
+  process.env.AGENT_CYCLE_INTERVAL_MS || "1800000",
+  10
+);
 
 // Agent runtime instances
 const agentRuntimes = new Map<string, AgentRuntime>();

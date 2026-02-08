@@ -196,8 +196,8 @@ async function main() {
     logger.info("Nitrolite Custody not configured, using ClearNode-only sessions");
   }
 
-  // Start agents (30 second cycle interval)
-  startAllAgents(agentConfigs, 30_000);
+  // Start agents (interval from env, defaults to 30 min)
+  startAllAgents(agentConfigs);
   logger.info("Agent loops started");
 
   // Start video generation scheduler (after agents are initialized with wallets)
