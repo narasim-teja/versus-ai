@@ -1,23 +1,26 @@
 # ---- Build Stage ----
 FROM oven/bun:1 AS builder
 
+# Install pnpm (needed for workspace dependency resolution)
+RUN npm install -g pnpm
+
 WORKDIR /app
 
-# Copy workspace root files
-COPY package.json pnpm-workspace.yaml turbo.json ./
+# Copy workspace root files + lockfile
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml turbo.json ./
 
 # Copy package manifests for dependency resolution
 COPY apps/server/package.json apps/server/
 COPY packages/streaming/package.json packages/streaming/
 
-# Install dependencies
-RUN bun install --frozen-lockfile || bun install
+# Install dependencies using pnpm (understands workspace protocol)
+RUN pnpm install --frozen-lockfile || pnpm install
 
 # Copy source code
 COPY packages/streaming/ packages/streaming/
 COPY apps/server/ apps/server/
 
-# Build the server
+# Build the server with bun
 RUN cd apps/server && bun run build
 
 # ---- Production Stage ----
@@ -25,7 +28,7 @@ FROM oven/bun:1-slim
 
 # Install FFmpeg for video processing
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends ffmpeg ca-certificates && \
+    apt-get install -y --no-install-recommends ffmpeg ca-certificates curl && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -37,6 +40,7 @@ COPY --from=builder /app/apps/server/package.json ./apps/server/
 COPY --from=builder /app/apps/server/node_modules ./apps/server/node_modules
 COPY --from=builder /app/packages/streaming ./packages/streaming
 COPY --from=builder /app/package.json ./
+COPY --from=builder /app/pnpm-workspace.yaml ./
 
 # Copy drizzle migrations (needed for db:migrate)
 COPY --from=builder /app/apps/server/src/db/migrations ./apps/server/src/db/migrations
