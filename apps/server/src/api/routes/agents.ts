@@ -175,6 +175,23 @@ agents.get("/:id/state", async (c) => {
 
     const status = getAgentStatus(agentId);
 
+    // Fetch market sentiment from Stork (non-blocking)
+    let sentiment = null;
+    try {
+      const sentimentData = await getMarketSentiment();
+      if (sentimentData) {
+        sentiment = {
+          overall: sentimentData.sentiment,
+          ethPrice: sentimentData.ethPrice?.priceFloat ?? null,
+          btcPrice: sentimentData.btcPrice?.priceFloat ?? null,
+          ethChange24h: sentimentData.ethChange24h ?? 0,
+          btcChange24h: sentimentData.btcChange24h ?? 0,
+        };
+      }
+    } catch {
+      // Stork unavailable — fine, sentiment stays null
+    }
+
     return c.json({
       agentId,
       usdcBalance: (usdcBalance as bigint).toString(),
@@ -182,6 +199,7 @@ agents.get("/:id/state", async (c) => {
       ownTokenSupply: (supply as bigint).toString(),
       ownTokenRevenue: (earned as bigint).toString(),
       loan,
+      marketSentiment: sentiment,
       currentCycle: status?.currentCycle ?? 0,
       lastDecisionTime: status?.lastDecisionTime ?? null,
       isRunning: status?.isRunning ?? false,
