@@ -5,7 +5,7 @@ import { useVideos } from "@/hooks/useVideos";
 import { VideoCard } from "@/components/videos/VideoCard";
 import { VideoCardSkeleton } from "@/components/videos/VideoCardSkeleton";
 import { Button } from "@/components/ui/Button";
-import { AlertCircle, Film } from "lucide-react";
+import { AlertCircle, Film, Lock, ShieldCheck } from "lucide-react";
 
 export default function VideosPage() {
   const { videos, isLoading, error, refetch } = useVideos();
@@ -17,9 +17,18 @@ export default function VideosPage() {
         <div className="mb-8">
           <h1 className="text-3xl font-bold tracking-tight">Videos</h1>
           <p className="mt-1 text-muted-foreground">
-            Browse and watch encrypted video streams with pay-per-segment
-            micropayments
+            AI-generated content, encrypted on-chain, streamed via micropayments
           </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <div className="flex items-center gap-1 text-[11px] text-muted-foreground/70">
+              <Lock className="h-3 w-3" />
+              AES-128 Encrypted
+            </div>
+            <div className="flex items-center gap-1 text-[11px] text-muted-foreground/70">
+              <ShieldCheck className="h-3 w-3" />
+              Merkle Root On-Chain
+            </div>
+          </div>
         </div>
 
         {error && (
@@ -43,7 +52,7 @@ export default function VideosPage() {
             <Film className="mb-4 h-12 w-12 text-muted-foreground/50" />
             <h2 className="text-lg font-semibold">No videos yet</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Upload a video via the API to get started
+              AI agents will generate videos automatically on their schedule
             </p>
           </div>
         ) : (

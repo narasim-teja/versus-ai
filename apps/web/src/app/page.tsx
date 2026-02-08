@@ -3,14 +3,12 @@
 import { Header } from "@/components/layout/Header";
 import { useAgents } from "@/hooks/useAgents";
 import { useTokenPrices } from "@/hooks/useTokenPrices";
-import { AgentCard } from "@/components/dashboard/AgentCard";
-import { AgentCardSkeleton } from "@/components/dashboard/AgentCardSkeleton";
-import { HealthIndicator } from "@/components/dashboard/HealthIndicator";
+import { AgentTradeCard } from "@/components/dashboard/AgentTradeCard";
 import { AgentDecisionPanel } from "@/components/decisions/AgentDecisionPanel";
-import { TokenTradingCard } from "@/components/trading/TokenTradingCard";
 import { PortfolioPanel } from "@/components/trading/PortfolioPanel";
 import { Button } from "@/components/ui/Button";
-import { AlertCircle } from "lucide-react";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { AlertCircle, Bot, Lock, ShieldCheck } from "lucide-react";
 
 export default function DashboardPage() {
   const { agents, isLoading, error, refetch } = useAgents();
@@ -20,16 +18,28 @@ export default function DashboardPage() {
     <div className="min-h-screen bg-background">
       <Header />
       <main className="container mx-auto px-4 py-8">
-        <div className="mb-8 flex items-start justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">
-              Agent Dashboard
-            </h1>
-            <p className="mt-1 text-muted-foreground">
-              Watch AI agents manage treasuries and trade in real-time
-            </p>
+        {/* Hero Context Banner */}
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold tracking-tight">
+            Versus
+          </h1>
+          <p className="mt-1 text-muted-foreground">
+            Autonomous AI agents compete by creating content, trading tokens, and managing treasuries on-chain
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <div className="flex items-center gap-1.5 rounded-full border border-border/50 bg-muted/20 px-3 py-1 text-xs text-muted-foreground">
+              <Bot className="h-3 w-3 text-blue-400" />
+              AI-Powered Trading
+            </div>
+            <div className="flex items-center gap-1.5 rounded-full border border-border/50 bg-muted/20 px-3 py-1 text-xs text-muted-foreground">
+              <Lock className="h-3 w-3 text-purple-400" />
+              Encrypted Streaming
+            </div>
+            <div className="flex items-center gap-1.5 rounded-full border border-border/50 bg-muted/20 px-3 py-1 text-xs text-muted-foreground">
+              <ShieldCheck className="h-3 w-3 text-green-400" />
+              On-Chain Verified
+            </div>
           </div>
-          <HealthIndicator />
         </div>
 
         {error && (
@@ -42,47 +52,46 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Agent Status Cards */}
+        {/* Agent Cards — merged with trading */}
         <div className="grid gap-6 md:grid-cols-2">
           {isLoading ? (
             <>
-              <AgentCardSkeleton />
-              <AgentCardSkeleton />
+              <div className="rounded-lg border p-6 space-y-4">
+                <Skeleton className="h-6 w-1/2" />
+                <Skeleton className="h-20 w-full" />
+                <Skeleton className="h-10 w-full" />
+              </div>
+              <div className="rounded-lg border p-6 space-y-4">
+                <Skeleton className="h-6 w-1/2" />
+                <Skeleton className="h-20 w-full" />
+                <Skeleton className="h-10 w-full" />
+              </div>
             </>
           ) : (
-            agents.map((agent) => <AgentCard key={agent.id} agent={agent} />)
+            agents.map((agent) => {
+              const priceData = prices.find((p) => p.agentId === agent.id);
+              return (
+                <AgentTradeCard
+                  key={agent.id}
+                  agent={agent}
+                  price={priceData?.price ?? "0"}
+                  totalSupply={priceData?.totalSupply ?? "0"}
+                />
+              );
+            })
           )}
         </div>
 
-        {/* Trade Tokens Section */}
+        {/* Portfolio strip */}
         {!isLoading && agents.length > 0 && (
-          <div className="mt-8">
-            <h2 className="mb-4 text-xl font-semibold tracking-tight">
-              Trade Tokens
-            </h2>
-            <div className="grid gap-6 md:grid-cols-3">
-              {agents.map((agent) => {
-                const priceData = prices.find((p) => p.agentId === agent.id);
-                return (
-                  <TokenTradingCard
-                    key={agent.id}
-                    agentId={agent.id}
-                    agentName={agent.name}
-                    tokenAddress={agent.tokenAddress}
-                    bondingCurveAddress={agent.bondingCurveAddress}
-                    price={priceData?.price ?? "0"}
-                    totalSupply={priceData?.totalSupply ?? "0"}
-                  />
-                );
-              })}
-              <PortfolioPanel />
-            </div>
+          <div className="mt-4">
+            <PortfolioPanel />
           </div>
         )}
 
         {/* Real-time Decision Feeds */}
         {!isLoading && agents.length > 0 && (
-          <div className="mt-8 grid gap-6 md:grid-cols-2">
+          <div className="mt-6 grid gap-6 md:grid-cols-2">
             {agents.map((agent) => (
               <AgentDecisionPanel
                 key={agent.id}
