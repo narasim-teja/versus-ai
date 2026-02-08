@@ -6,7 +6,7 @@ import "@/styles/globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Versus - Agent Dashboard",
+  title: "Versus - ai",
   description:
     "Decentralized agentic commerce - watch AI agents trade in real-time",
 };
