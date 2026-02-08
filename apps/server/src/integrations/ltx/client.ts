@@ -45,11 +45,16 @@ export async function generateVideo(
 
   const {
     prompt,
-    duration,
     resolution = "1920x1080",
     model = "ltx-2-pro",
     generateAudio = true,
   } = options;
+
+  // ltx-2-pro only supports 6, 8, or 10 second durations
+  const validDurations = [6, 8, 10] as const;
+  const duration = validDurations.reduce((best, d) =>
+    Math.abs(d - options.duration) < Math.abs(best - options.duration) ? d : best
+  );
 
   logger.info(
     { prompt: prompt.substring(0, 100), duration, resolution, model },

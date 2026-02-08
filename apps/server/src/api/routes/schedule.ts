@@ -18,8 +18,8 @@ const scheduleRoutes = new Hono();
 /**
  * GET /api/agents/schedules - Get all agents' schedule statuses
  */
-scheduleRoutes.get("/schedules", (c) => {
-  const statuses = getAllScheduleStatuses();
+scheduleRoutes.get("/schedules", async (c) => {
+  const statuses = await getAllScheduleStatuses();
   return c.json({
     configured: isVideoGenerationConfigured(),
     schedules: statuses,
@@ -29,9 +29,9 @@ scheduleRoutes.get("/schedules", (c) => {
 /**
  * GET /api/agents/:id/schedule - Get schedule status for a specific agent
  */
-scheduleRoutes.get("/:id/schedule", (c) => {
+scheduleRoutes.get("/:id/schedule", async (c) => {
   const agentId = c.req.param("id");
-  const status = getScheduleStatus(agentId);
+  const status = await getScheduleStatus(agentId);
   return c.json(status);
 });
 

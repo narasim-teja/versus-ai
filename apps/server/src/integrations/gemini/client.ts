@@ -10,7 +10,7 @@ import { logger } from "../../utils/logger";
 import { getStorageProvider, isSupabaseConfigured } from "../supabase";
 
 const GEMINI_API_URL =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-image-generation:generateContent";
+  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent";
 const GEMINI_TIMEOUT_MS = 60_000; // 1 minute
 
 export interface ThumbnailResult {

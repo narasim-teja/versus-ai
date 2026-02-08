@@ -62,7 +62,7 @@ Respond with ONLY a valid JSON object (no markdown, no explanation):
   "description": "Brief description for viewers (1-2 sentences, max 200 chars)",
   "videoPrompt": "Detailed visual scene description for AI video generation. Describe camera movement, colors, objects, atmosphere, style. Be specific and cinematic. Max 500 chars.",
   "thumbnailPrompt": "Description of the thumbnail image to generate. Include style, colors, composition. Max 300 chars.",
-  "duration": 15,
+  "duration": "6, 8, or 10 (seconds — pick one)",
   "topic": "one of your topic categories"
 }`;
 }
@@ -106,8 +106,12 @@ export async function ideateVideo(
   parsed.videoPrompt = parsed.videoPrompt.slice(0, 500);
   parsed.thumbnailPrompt = parsed.thumbnailPrompt.slice(0, 300);
 
-  // Clamp duration to 10-20 range
-  parsed.duration = Math.max(10, Math.min(20, parsed.duration || 15));
+  // Clamp duration to valid LTX-2 Pro values: 6, 8, or 10 seconds
+  const validDurations = [6, 8, 10] as const;
+  const raw = parsed.duration || 10;
+  parsed.duration = validDurations.reduce((best, d) =>
+    Math.abs(d - raw) < Math.abs(best - raw) ? d : best
+  );
 
   logger.info(
     {

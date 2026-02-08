@@ -9,7 +9,7 @@
  *   Bob:   T+2h, T+6h, T+10h, ...
  */
 
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, count as sqlCount } from "drizzle-orm";
 import { db } from "../../db/client";
 import { videoGenerations } from "../../db/schema";
 import { logger } from "../../utils/logger";
@@ -66,19 +66,43 @@ export function isVideoGenerationConfigured(): boolean {
 }
 
 /**
- * Query the DB for the most recent generation for an agent.
- * Returns ms since that generation started, or null if no prior generation exists.
+ * Query the DB for the most recent generation and total count for an agent.
  */
-async function getMsSinceLastGeneration(agentId: string): Promise<number | null> {
-  const [lastGen] = await db
-    .select({ startedAt: videoGenerations.startedAt })
-    .from(videoGenerations)
-    .where(eq(videoGenerations.agentId, agentId))
-    .orderBy(desc(videoGenerations.startedAt))
-    .limit(1);
+async function getGenerationHistory(agentId: string): Promise<{
+  msSinceLast: number | null;
+  totalCount: number;
+  lastStatus: string | null;
+  lastVideoId: string | null;
+  lastTitle: string | null;
+  lastCompletedAt: Date | null;
+}> {
+  const [[countResult], [lastGen]] = await Promise.all([
+    db
+      .select({ total: sqlCount() })
+      .from(videoGenerations)
+      .where(eq(videoGenerations.agentId, agentId)),
+    db
+      .select({
+        startedAt: videoGenerations.startedAt,
+        status: videoGenerations.status,
+        videoId: videoGenerations.videoId,
+        title: videoGenerations.title,
+        completedAt: videoGenerations.completedAt,
+      })
+      .from(videoGenerations)
+      .where(eq(videoGenerations.agentId, agentId))
+      .orderBy(desc(videoGenerations.startedAt))
+      .limit(1),
+  ]);
 
-  if (!lastGen) return null;
-  return Date.now() - lastGen.startedAt.getTime();
+  return {
+    msSinceLast: lastGen ? Date.now() - lastGen.startedAt.getTime() : null,
+    totalCount: countResult?.total ?? 0,
+    lastStatus: lastGen?.status ?? null,
+    lastVideoId: lastGen?.videoId ?? null,
+    lastTitle: lastGen?.title ?? null,
+    lastCompletedAt: lastGen?.completedAt ?? null,
+  };
 }
 
 /**
@@ -124,20 +148,21 @@ export async function startVideoScheduler(agentConfigs: AgentConfig[]): Promise<
       continue;
     }
 
-    // Check DB for the last generation to avoid re-triggering on restart
-    const msSinceLast = await getMsSinceLastGeneration(agentId);
+    // Check DB for generation history to restore state across restarts
+    const history = await getGenerationHistory(agentId);
     const defaultOffsetMs = i * offsetMs;
     let firstDelayMs: number;
 
-    if (msSinceLast !== null && msSinceLast < intervalMs) {
+    if (history.msSinceLast !== null && history.msSinceLast < intervalMs) {
       // Recent generation exists — wait for the remaining interval time
-      firstDelayMs = intervalMs - msSinceLast;
+      firstDelayMs = intervalMs - history.msSinceLast;
       logger.info(
         {
           agentId,
-          msSinceLast,
+          msSinceLast: history.msSinceLast,
           waitingMs: firstDelayMs,
           waitingMinutes: Math.round(firstDelayMs / 60000),
+          totalGenerations: history.totalCount,
         },
         "Recent generation found in DB, delaying first generation to respect interval"
       );
@@ -158,7 +183,7 @@ export async function startVideoScheduler(agentConfigs: AgentConfig[]): Promise<
       lastGeneration: null,
       currentGeneration: null,
       isGenerating: false,
-      generationCount: 0,
+      generationCount: history.totalCount,
     };
 
     schedulerEntries.set(agentId, entry);
@@ -178,7 +203,7 @@ export async function startVideoScheduler(agentConfigs: AgentConfig[]): Promise<
         firstGenerationAt: nextGenerationAt.toISOString(),
         delayMinutes: Math.round(firstDelayMs / 60000),
         intervalHours: intervalMs / (60 * 60 * 1000),
-        hadRecentGeneration: msSinceLast !== null && msSinceLast < intervalMs,
+        hadRecentGeneration: history.msSinceLast !== null && history.msSinceLast < intervalMs,
       },
       "Agent video scheduler registered"
     );
@@ -237,9 +262,10 @@ async function triggerGeneration(entry: SchedulerEntry): Promise<void> {
 }
 
 /**
- * Get schedule status for an agent (used by API endpoint)
+ * Get schedule status for an agent (used by API endpoint).
+ * Falls back to DB for last generation info if in-memory state is empty (e.g. after restart).
  */
-export function getScheduleStatus(agentId: string): ScheduleStatus {
+export async function getScheduleStatus(agentId: string): Promise<ScheduleStatus> {
   const entry = schedulerEntries.get(agentId);
   if (!entry) {
     return {
@@ -262,15 +288,28 @@ export function getScheduleStatus(agentId: string): ScheduleStatus {
     entry.nextGenerationAt.getTime() - Date.now()
   );
 
+  // Use in-memory last generation if available, otherwise query DB
+  let lastStatus: GenerationStatus | null = entry.lastGeneration?.status ?? null;
+  let lastVideoId: string | null = entry.lastGeneration?.videoId ?? null;
+  let lastTitle: string | null = entry.lastGeneration?.videoIdea?.title ?? null;
+  let lastAt: string | null = entry.lastGeneration?.completedAt?.toISOString() ?? null;
+
+  if (!lastStatus) {
+    const history = await getGenerationHistory(agentId);
+    lastStatus = history.lastStatus as GenerationStatus | null;
+    lastVideoId = history.lastVideoId;
+    lastTitle = history.lastTitle;
+    lastAt = history.lastCompletedAt?.toISOString() ?? null;
+  }
+
   return {
     agentId: entry.agentId,
     nextGenerationAt: entry.nextGenerationAt.toISOString(),
     msUntilNext,
-    lastGenerationStatus: entry.lastGeneration?.status ?? null,
-    lastGenerationVideoId: entry.lastGeneration?.videoId ?? null,
-    lastGenerationTitle: entry.lastGeneration?.videoIdea?.title ?? null,
-    lastGenerationAt:
-      entry.lastGeneration?.completedAt?.toISOString() ?? null,
+    lastGenerationStatus: lastStatus,
+    lastGenerationVideoId: lastVideoId,
+    lastGenerationTitle: lastTitle,
+    lastGenerationAt: lastAt,
     currentGenerationStatus: entry.isGenerating
       ? (entry.currentGeneration?.status ?? "generating_video")
       : null,
@@ -283,8 +322,8 @@ export function getScheduleStatus(agentId: string): ScheduleStatus {
 /**
  * Get all schedule statuses
  */
-export function getAllScheduleStatuses(): ScheduleStatus[] {
-  return ["alice", "bob"].map((id) => getScheduleStatus(id));
+export async function getAllScheduleStatuses(): Promise<ScheduleStatus[]> {
+  return Promise.all(["alice", "bob"].map((id) => getScheduleStatus(id)));
 }
 
 /**
