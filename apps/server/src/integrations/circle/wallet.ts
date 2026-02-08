@@ -3,8 +3,9 @@
  *
  * Implements hybrid wallet management:
  * 1. Check DB for existing wallet by agentId
- * 2. If exists, return cached wallet info
- * 3. If not, create via Circle API and store in DB
+ * 2. If not in DB, list wallets from Circle API and match by refId
+ * 3. If found in Circle but not DB, persist to DB
+ * 4. Only create new wallet if not found anywhere
  */
 
 import { eq } from "drizzle-orm";
@@ -24,28 +25,99 @@ const BLOCKCHAIN = "ARC-TESTNET";
  * - Creates new wallet via Circle API if not found
  * - Stores new wallet in database for future lookups
  */
-export async function getOrCreateWallet(agentId: string): Promise<AgentWalletInfo> {
+export async function getOrCreateWallet(agentId: string, knownAddress?: string): Promise<AgentWalletInfo> {
   // Step 1: Check database for existing wallet
-  const existing = await db.query.circleWallets.findFirst({
-    where: eq(circleWallets.agentId, agentId),
-  });
+  try {
+    const existing = await db.query.circleWallets.findFirst({
+      where: eq(circleWallets.agentId, agentId),
+    });
 
-  if (existing) {
-    logger.debug({ agentId, walletId: existing.id }, "Found existing Circle wallet");
-    return {
-      id: existing.id,
-      address: existing.address,
-      blockchain: existing.blockchain,
-      walletSetId: existing.walletSetId,
-      agentId: existing.agentId!,
-      createdAt: existing.createdAt!,
-    };
+    if (existing) {
+      // If we have a known address from env, verify the DB record matches
+      if (knownAddress && existing.address.toLowerCase() !== knownAddress.toLowerCase()) {
+        logger.warn(
+          { agentId, dbAddress: existing.address, expectedAddress: knownAddress },
+          "DB wallet address mismatch — stale record, will search Circle API"
+        );
+        // Delete the stale record
+        await db.delete(circleWallets).where(eq(circleWallets.id, existing.id));
+      } else {
+        logger.info({ agentId, walletId: existing.id, address: existing.address }, "Found existing Circle wallet in DB");
+        return {
+          id: existing.id,
+          address: existing.address,
+          blockchain: existing.blockchain,
+          walletSetId: existing.walletSetId,
+          agentId: existing.agentId!,
+          createdAt: existing.createdAt!,
+        };
+      }
+    }
+  } catch (dbError) {
+    logger.warn({ agentId, error: (dbError as Error).message }, "DB query for existing wallet failed, will check Circle API");
   }
 
-  // Step 2: Create new wallet via Circle API
-  logger.info({ agentId }, "Creating new Circle wallet");
+  // Step 2: Check Circle API for existing wallet (by address or refId)
   const circleClient = getCircleClient();
   const walletSetId = getWalletSetId();
+
+  try {
+    const listResponse = await circleClient.listWallets({ walletSetId });
+    const existingWallets = listResponse.data?.wallets || [];
+
+    // Prefer matching by known address (most reliable), fallback to refId
+    let matchingWallet = knownAddress
+      ? existingWallets.find(
+          (w) => w.address?.toLowerCase() === knownAddress.toLowerCase() && w.blockchain === BLOCKCHAIN
+        )
+      : undefined;
+
+    if (!matchingWallet) {
+      matchingWallet = existingWallets.find(
+        (w) => w.refId === agentId && w.blockchain === BLOCKCHAIN
+      );
+    }
+
+    if (matchingWallet) {
+      logger.info(
+        { agentId, walletId: matchingWallet.id, address: matchingWallet.address },
+        "Found existing Circle wallet via API (not in DB), persisting"
+      );
+
+      const now = new Date();
+
+      // Persist to DB for future lookups
+      try {
+        await db
+          .insert(circleWallets)
+          .values({
+            id: matchingWallet.id,
+            agentId,
+            address: matchingWallet.address,
+            blockchain: matchingWallet.blockchain,
+            walletSetId: matchingWallet.walletSetId,
+            createdAt: now,
+          })
+          .onConflictDoNothing();
+      } catch (insertErr) {
+        logger.warn({ agentId, error: (insertErr as Error).message }, "Failed to persist wallet to DB (non-fatal)");
+      }
+
+      return {
+        id: matchingWallet.id,
+        address: matchingWallet.address,
+        blockchain: matchingWallet.blockchain,
+        walletSetId: matchingWallet.walletSetId,
+        agentId,
+        createdAt: now,
+      };
+    }
+  } catch (listErr) {
+    logger.warn({ agentId, error: (listErr as Error).message }, "Failed to list Circle wallets (will create new)");
+  }
+
+  // Step 3: Create new wallet via Circle API (no existing wallet found anywhere)
+  logger.info({ agentId }, "Creating new Circle wallet");
 
   const response = await circleClient.createWallets({
     walletSetId,
@@ -67,15 +139,22 @@ export async function getOrCreateWallet(agentId: string): Promise<AgentWalletInf
   const wallet = response.data.wallets[0];
   const now = new Date();
 
-  // Step 3: Store in database
-  await db.insert(circleWallets).values({
-    id: wallet.id,
-    agentId,
-    address: wallet.address,
-    blockchain: wallet.blockchain,
-    walletSetId: wallet.walletSetId,
-    createdAt: now,
-  });
+  // Step 4: Store in database
+  try {
+    await db
+      .insert(circleWallets)
+      .values({
+        id: wallet.id,
+        agentId,
+        address: wallet.address,
+        blockchain: wallet.blockchain,
+        walletSetId: wallet.walletSetId,
+        createdAt: now,
+      })
+      .onConflictDoNothing();
+  } catch (insertErr) {
+    logger.warn({ agentId, error: (insertErr as Error).message }, "Failed to persist new wallet to DB (non-fatal)");
+  }
 
   logger.info(
     { agentId, walletId: wallet.id, address: wallet.address },

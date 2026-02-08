@@ -2,6 +2,7 @@ import { config } from "./config";
 import type {
   Agent,
   AgentDetail,
+  AgentEarnings,
   DecisionLog,
   HealthResponse,
   TokenPrice,
@@ -167,6 +168,21 @@ export async function closeSession(
     `/api/videos/${videoId}/session/${sessionId}/close`,
     { method: "POST" }
   );
+}
+
+// ── Agent Detail APIs ────────────────────────
+
+export async function fetchAgentVideos(agentId: string): Promise<Video[]> {
+  const data = await fetchJson<{ videos: Video[] }>(
+    `/api/agents/${agentId}/videos`
+  );
+  return data.videos;
+}
+
+export async function fetchAgentEarnings(
+  agentId: string
+): Promise<AgentEarnings> {
+  return fetchJson<AgentEarnings>(`/api/agents/${agentId}/earnings`);
 }
 
 /** Result from cosign including optional merkle proof */

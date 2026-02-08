@@ -23,10 +23,12 @@ const envSchema = z.object({
   // Agent Alice - Token/BondingCurve addresses (EVM address comes from Circle wallet)
   ALICE_TOKEN_ADDRESS: z.string().startsWith("0x"),
   ALICE_BONDING_CURVE_ADDRESS: z.string().startsWith("0x"),
+  ALICE_WALLET_ADDRESS: z.string().startsWith("0x").optional(),
 
   // Agent Bob - Token/BondingCurve addresses (EVM address comes from Circle wallet)
   BOB_TOKEN_ADDRESS: z.string().startsWith("0x"),
   BOB_BONDING_CURVE_ADDRESS: z.string().startsWith("0x"),
+  BOB_WALLET_ADDRESS: z.string().startsWith("0x").optional(),
 
   // OpenRouter (optional - falls back to rule-based decisions if not set)
   OPENROUTER_API_KEY: z.string().min(1).optional(),

@@ -286,3 +286,15 @@ export interface SessionCloseResult {
     distribution: string | null;
   } | null;
 }
+
+// ============================================
+// Agent Earnings Types
+// ============================================
+
+export interface AgentEarnings {
+  agentId: string;
+  totalStreamingEarnings: string;
+  totalSessions: number;
+  closedSessions: number;
+  totalSegmentsDelivered: number;
+}

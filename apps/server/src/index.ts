@@ -17,7 +17,7 @@ import { logger } from "./utils/logger";
 import { initializeDatabase, closeDatabase } from "./db/client";
 import { healthRoutes, agentRoutes, agentsWebsocket, videoRoutes, streamingRoutes, authRoutes, tradingRoutes } from "./api/routes";
 import { createAllAgentConfigs, startAllAgents, stopAllAgents } from "./agents";
-import { initializeAgentWallets } from "./agents/init";
+import { seedAgents, initializeAgentWallets } from "./agents/init";
 import {
   watchBondingCurveEvents,
   watchCreatorFactory,
@@ -128,6 +128,9 @@ async function main() {
     { agents: agentConfigs.map((a) => a.id) },
     "Agent configurations loaded"
   );
+
+  // Seed agent records in DB (required for circle_wallets FK constraint)
+  await seedAgents(agentConfigs);
 
   // Initialize Circle wallets for agents
   const agentWallets = await initializeAgentWallets(agentConfigs);

@@ -19,6 +19,9 @@ import {
   subscribeToDecisions,
 } from "../../agents";
 import type { DecisionLog } from "../../agents";
+import { db } from "../../db/client";
+import { videos, yellowSessions } from "../../db/schema";
+import { eq, desc, inArray } from "drizzle-orm";
 import { logger } from "../../utils/logger";
 
 const agents = new Hono();
@@ -200,6 +203,112 @@ agents.post("/:id/cycle", async (c) => {
         typeof value === "bigint" ? value.toString() : value
       )
     ),
+  });
+});
+
+/**
+ * GET /api/agents/:id/videos
+ *
+ * Get videos created by this agent
+ */
+agents.get("/:id/videos", async (c) => {
+  const agentId = c.req.param("id");
+  const config = getAgentConfig(agentId);
+
+  if (!config) {
+    return c.json({ error: "Agent not found" }, 404);
+  }
+
+  const agentVideos = await db
+    .select({
+      id: videos.id,
+      agentId: videos.agentId,
+      title: videos.title,
+      description: videos.description,
+      status: videos.status,
+      durationSeconds: videos.durationSeconds,
+      totalSegments: videos.totalSegments,
+      quality: videos.quality,
+      contentUri: videos.contentUri,
+      thumbnailUri: videos.thumbnailUri,
+      createdAt: videos.createdAt,
+      processedAt: videos.processedAt,
+    })
+    .from(videos)
+    .where(eq(videos.agentId, agentId))
+    .orderBy(desc(videos.createdAt));
+
+  return c.json({ videos: agentVideos });
+});
+
+/**
+ * GET /api/agents/:id/earnings
+ *
+ * Aggregate streaming earnings from Yellow sessions for this agent's videos
+ */
+agents.get("/:id/earnings", async (c) => {
+  const agentId = c.req.param("id");
+  const config = getAgentConfig(agentId);
+
+  if (!config) {
+    return c.json({ error: "Agent not found" }, 404);
+  }
+
+  // Get all video IDs for this agent
+  const agentVideos = await db
+    .select({ id: videos.id })
+    .from(videos)
+    .where(eq(videos.agentId, agentId));
+
+  const videoIds = agentVideos.map((v) => v.id);
+
+  if (videoIds.length === 0) {
+    return c.json({
+      agentId,
+      totalStreamingEarnings: "0",
+      totalSessions: 0,
+      closedSessions: 0,
+      totalSegmentsDelivered: 0,
+    });
+  }
+
+  // Aggregate earnings from Yellow sessions
+  const sessions = await db
+    .select({
+      creatorBalance: yellowSessions.creatorBalance,
+      segmentsDelivered: yellowSessions.segmentsDelivered,
+      status: yellowSessions.status,
+    })
+    .from(yellowSessions)
+    .where(inArray(yellowSessions.videoId, videoIds));
+
+  let totalEarnings = BigInt(0);
+  let totalSegments = 0;
+  let closedCount = 0;
+
+  for (const s of sessions) {
+    if (s.status === "closed" || s.status === "settled") {
+      // creatorBalance may be a decimal string or integer string
+      const raw = s.creatorBalance || "0";
+      try {
+        // If it's an integer string, use BigInt directly
+        totalEarnings += BigInt(raw.split(".")[0]);
+      } catch {
+        // Fallback: parse as float and convert to integer (6-decimal USDC)
+        const parsed = Math.floor(parseFloat(raw) * 1e6);
+        if (!isNaN(parsed)) totalEarnings += BigInt(parsed);
+      }
+      closedCount++;
+    }
+    totalSegments += s.segmentsDelivered || 0;
+  }
+
+  return c.json({
+    agentId,
+    totalStreamingEarnings: totalEarnings.toString(),
+    totalSessions: sessions.length,
+    closedSessions: closedCount,
+    totalSegmentsDelivered: totalSegments,
   });
 });
 

@@ -47,13 +47,20 @@ export function executeChallenge(
       const status = result?.status ?? "unknown";
       const type = result?.type ?? "unknown";
 
-      // Only resolve on COMPLETE; reject on any other terminal status
-      if (status !== "COMPLETE" && status !== "IN_PROGRESS" && status !== "PENDING") {
-        reject(new Error(`Challenge ${status.toLowerCase()}`));
+      // Only resolve on COMPLETE — the SDK callback fires multiple times
+      // as the challenge progresses through statuses
+      if (status === "COMPLETE") {
+        resolve({ type, status });
         return;
       }
 
-      resolve({ type, status });
+      // Non-terminal statuses: wait for the next callback invocation
+      if (status === "IN_PROGRESS" || status === "PENDING") {
+        return;
+      }
+
+      // Any other status is a failure
+      reject(new Error(`Challenge ${status.toLowerCase()}`));
     });
   });
 }

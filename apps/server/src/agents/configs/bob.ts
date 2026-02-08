@@ -45,11 +45,12 @@ const bobStrategy: StrategyConfig = {
 };
 
 export function createBobConfig(circleWalletAddress?: string): AgentConfig {
+  const knownAddress = circleWalletAddress || env.BOB_WALLET_ADDRESS;
   return {
     id: "bob",
     name: "Bob (Degen)",
     circleWalletId: undefined, // Set during agent initialization
-    evmAddress: (circleWalletAddress || "0x0000000000000000000000000000000000000000") as Address,
+    evmAddress: (knownAddress || "0x0000000000000000000000000000000000000000") as Address,
     tokenAddress: env.BOB_TOKEN_ADDRESS as Address,
     bondingCurveAddress: env.BOB_BONDING_CURVE_ADDRESS as Address,
     strategyType: "degen",
