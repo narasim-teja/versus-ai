@@ -131,6 +131,8 @@ streamingRoutes.post("/:videoId/session", async (c) => {
         status: "active",
         creatorTokenAddress: creatorTokenAddress || null,
         creatorBondingCurveAddress: creatorBondingCurveAddress || null,
+        channelId: session.channelId || null,
+        custodyDepositTxHash: session.custodyDepositTxHash || null,
       });
 
       logger.info(
@@ -146,6 +148,8 @@ streamingRoutes.post("/:videoId/session", async (c) => {
         viewerBalance: session.viewerBalance,
         totalDeposited: session.totalDeposited,
         asset: env.YELLOW_ASSET,
+        channelId: session.channelId || null,
+        custodyDepositTxHash: session.custodyDepositTxHash || null,
       });
     } catch (err) {
       logger.error({ err, videoId, viewerAddress }, "Failed to create Yellow session");
@@ -422,6 +426,8 @@ streamingRoutes.post("/:videoId/session/:sessionId/close", async (c) => {
         settlementTxHashBase: result.settlement.settlementTxHash,
         bridgeTxHash: result.settlement.bridgeTxHash,
         distributionTxHash: result.settlement.distributionTxHash,
+        channelCloseTxHash: result.settlement.channelCloseTxHash,
+        custodyWithdrawTxHash: result.settlement.custodyWithdrawTxHash,
       })
       .where(eq(yellowSessions.id, sessionId));
 
@@ -430,25 +436,40 @@ streamingRoutes.post("/:videoId/session/:sessionId/close", async (c) => {
       "Yellow session closed with on-chain settlement",
     );
 
+    const s = result.settlement;
     return c.json({
       closed: true,
       totalPaid: result.totalPaid,
       settled: result.settled,
       segmentsDelivered: session.segmentsDelivered,
+      channelId: s.channelId,
+      // Nitrolite Custody tx hashes
+      custodyDepositTxHash: s.custodyDepositTxHash,
+      channelCloseTxHash: s.channelCloseTxHash,
+      custodyWithdrawTxHash: s.custodyWithdrawTxHash,
       // Cross-chain settlement tx hashes
-      settlementTxHash: result.settlement.settlementTxHash,
-      bridgeTxHash: result.settlement.bridgeTxHash,
-      distributionTxHash: result.settlement.distributionTxHash,
+      settlementTxHash: s.settlementTxHash,
+      bridgeTxHash: s.bridgeTxHash,
+      distributionTxHash: s.distributionTxHash,
       // Explorer links for judges
       explorerLinks: {
-        settlement: result.settlement.settlementTxHash
-          ? `https://sepolia.basescan.org/tx/${result.settlement.settlementTxHash}`
+        custodyDeposit: s.custodyDepositTxHash
+          ? `https://sepolia.basescan.org/tx/${s.custodyDepositTxHash}`
           : null,
-        bridge: result.settlement.bridgeTxHash
-          ? `https://sepolia.basescan.org/tx/${result.settlement.bridgeTxHash}`
+        channelClose: s.channelCloseTxHash
+          ? `https://sepolia.basescan.org/tx/${s.channelCloseTxHash}`
           : null,
-        distribution: result.settlement.distributionTxHash
-          ? `https://explorer-testnet.arc.dev/tx/${result.settlement.distributionTxHash}`
+        custodyWithdraw: s.custodyWithdrawTxHash
+          ? `https://sepolia.basescan.org/tx/${s.custodyWithdrawTxHash}`
+          : null,
+        settlement: s.settlementTxHash
+          ? `https://sepolia.basescan.org/tx/${s.settlementTxHash}`
+          : null,
+        bridge: s.bridgeTxHash
+          ? `https://sepolia.basescan.org/tx/${s.bridgeTxHash}`
+          : null,
+        distribution: s.distributionTxHash
+          ? `https://explorer-testnet.arc.dev/tx/${s.distributionTxHash}`
           : null,
       },
     });

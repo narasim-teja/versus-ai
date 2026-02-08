@@ -251,6 +251,11 @@ export const yellowSessions = pgTable(
     settlementTxHashBase: text("settlement_tx_hash_base"), // Base Sepolia settlement record
     bridgeTxHash: text("bridge_tx_hash"), // Base Sepolia bridge escrow
     distributionTxHash: text("distribution_tx_hash"), // ARC testnet revenue distribution
+    // Nitrolite Custody on-chain state channel tracking
+    channelId: text("channel_id"), // On-chain state channel ID
+    custodyDepositTxHash: text("custody_deposit_tx_hash"), // USDC deposited into Custody
+    channelCloseTxHash: text("channel_close_tx_hash"), // Channel closed on-chain
+    custodyWithdrawTxHash: text("custody_withdraw_tx_hash"), // Funds withdrawn from Custody
     createdAt: timestamp("created_at").defaultNow(),
     closedAt: timestamp("closed_at"),
   },

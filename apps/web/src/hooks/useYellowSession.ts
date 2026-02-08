@@ -10,6 +10,7 @@ import {
 import { cosignAndGetKey } from "@/lib/api";
 import { config } from "@/lib/config";
 import type { SessionCloseResult } from "@/lib/types";
+import { RPCData } from "@erc7824/nitrolite";
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -192,7 +193,7 @@ export function useYellowSession() {
 
         // Sign with session signer (ephemeral key)
         const requestBytes = new TextEncoder().encode(JSON.stringify(request));
-        const signature = await client.sessionSigner(requestBytes);
+        const signature = await client.sessionSigner(request as RPCData);
 
         const signedMessage = JSON.stringify({
           req: request,

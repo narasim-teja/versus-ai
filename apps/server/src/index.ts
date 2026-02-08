@@ -27,6 +27,10 @@ import {
   getYellowClient,
   disconnectYellow,
 } from "./integrations/yellow";
+import {
+  isNitroliteConfigured,
+  getNitroliteClient,
+} from "./integrations/nitrolite";
 import type { Address } from "viem";
 
 // Create Hono app
@@ -159,6 +163,26 @@ async function main() {
     }
   } else {
     logger.info("Yellow Network not configured, using legacy bearer auth for streaming");
+  }
+
+  // Initialize Nitrolite Custody/Adjudicator if configured
+  if (isNitroliteConfigured()) {
+    try {
+      const nitroClient = getNitroliteClient();
+      if (nitroClient) {
+        logger.info(
+          {
+            custody: env.NITROLITE_CUSTODY_ADDRESS,
+            adjudicator: env.NITROLITE_ADJUDICATOR_ADDRESS,
+          },
+          "Nitrolite Custody client initialized for on-chain state channels",
+        );
+      }
+    } catch (err) {
+      logger.warn({ err }, "Nitrolite initialization failed (non-fatal)");
+    }
+  } else {
+    logger.info("Nitrolite Custody not configured, using ClearNode-only sessions");
   }
 
   // Start agents (30 second cycle interval)

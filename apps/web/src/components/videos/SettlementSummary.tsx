@@ -63,6 +63,8 @@ function TxCard({
 
 export function SettlementSummary({ result }: SettlementSummaryProps) {
   const hasTxHashes =
+    result.custodyDepositTxHash ||
+    result.channelCloseTxHash ||
     result.settlementTxHash ||
     result.bridgeTxHash ||
     result.distributionTxHash;
@@ -79,6 +81,20 @@ export function SettlementSummary({ result }: SettlementSummaryProps) {
       </div>
 
       <div className="grid gap-2">
+        <TxCard
+          label="Custody Deposit"
+          chain="Base Sepolia"
+          txHash={result.custodyDepositTxHash}
+          explorerLink={result.explorerLinks?.custodyDeposit ?? null}
+          description="USDC deposited into Nitrolite Custody contract"
+        />
+        <TxCard
+          label="Channel Closed"
+          chain="Base Sepolia"
+          txHash={result.channelCloseTxHash}
+          explorerLink={result.explorerLinks?.channelClose ?? null}
+          description="State channel finalized on-chain"
+        />
         <TxCard
           label="Settlement Recorded"
           chain="Base Sepolia"

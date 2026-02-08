@@ -20,6 +20,11 @@ import {
 } from "@erc7824/nitrolite";
 import { getYellowClient, isYellowConfigured } from "./client";
 import { triggerSettlement, type SettlementResult } from "./settlement";
+import {
+  isNitroliteConfigured,
+  openCustodyChannel,
+  closeCustodyChannel,
+} from "../nitrolite";
 import { env } from "../../utils/env";
 import { logger } from "../../utils/logger";
 import { randomUUID } from "crypto";
@@ -45,6 +50,11 @@ export interface StreamingSession {
   // On-chain settlement fields (denormalized from agent)
   creatorTokenAddress: string;
   creatorBondingCurveAddress: string;
+  // Nitrolite Custody on-chain channel fields
+  channelId: string | null;
+  custodyDepositTxHash: string | null;
+  channelCloseTxHash: string | null;
+  custodyWithdrawTxHash: string | null;
 }
 
 // ─── In-Memory Session Store ─────────────────────────────────────────
@@ -127,6 +137,32 @@ export async function createStreamingSession(
     );
   }
 
+  // Open on-chain Custody channel (graceful degradation)
+  let channelId: string | null = null;
+  let custodyDepositTxHash: string | null = null;
+
+  if (isNitroliteConfigured()) {
+    try {
+      const channelResult = await openCustodyChannel(
+        viewerAddress as `0x${string}`,
+        depositAmount,
+      );
+      if (channelResult) {
+        channelId = channelResult.channelId;
+        custodyDepositTxHash = channelResult.txHash;
+        logger.info(
+          { channelId, custodyDepositTxHash, appSessionId },
+          "On-chain Custody channel opened for session",
+        );
+      }
+    } catch (err) {
+      logger.warn(
+        { err, appSessionId },
+        "Nitrolite Custody channel open failed (continuing with ClearNode-only)",
+      );
+    }
+  }
+
   const session: StreamingSession = {
     appSessionId,
     videoId,
@@ -144,6 +180,10 @@ export async function createStreamingSession(
     paidSegments: new Set<number>(),
     creatorTokenAddress,
     creatorBondingCurveAddress,
+    channelId,
+    custodyDepositTxHash,
+    channelCloseTxHash: null,
+    custodyWithdrawTxHash: null,
   };
 
   activeSessions.set(appSessionId, session);
@@ -156,6 +196,7 @@ export async function createStreamingSession(
       creator: creatorAddress,
       deposit: depositAmount,
       serverAddress: client.serverAddress,
+      channelId,
     },
     "Yellow streaming session created",
   );
@@ -411,6 +452,34 @@ export async function closeStreamingSession(
     );
   }
 
+  // Close on-chain Custody channel (graceful degradation)
+  if (session.channelId && isNitroliteConfigured()) {
+    try {
+      const closeResult = await closeCustodyChannel(
+        session.channelId as `0x${string}`,
+        session.viewerAddress as `0x${string}`,
+        session.viewerBalance,
+        session.creatorBalance,
+      );
+      session.channelCloseTxHash = closeResult.closeTxHash;
+      session.custodyWithdrawTxHash = closeResult.withdrawTxHash;
+      logger.info(
+        {
+          appSessionId,
+          channelId: session.channelId,
+          closeTxHash: closeResult.closeTxHash,
+          withdrawTxHash: closeResult.withdrawTxHash,
+        },
+        "On-chain Custody channel closed for session",
+      );
+    } catch (err) {
+      logger.warn(
+        { err, appSessionId, channelId: session.channelId },
+        "Nitrolite Custody channel close failed (continuing with settlement)",
+      );
+    }
+  }
+
   logger.info(
     {
       appSessionId,
@@ -427,9 +496,16 @@ export async function closeStreamingSession(
     settlementTxHash: null,
     bridgeTxHash: null,
     distributionTxHash: null,
+    custodyDepositTxHash: session.custodyDepositTxHash,
+    channelCloseTxHash: session.channelCloseTxHash,
+    custodyWithdrawTxHash: session.custodyWithdrawTxHash,
+    channelId: session.channelId,
   };
   try {
-    settlement = await triggerSettlement(session);
+    const chainSettlement = await triggerSettlement(session);
+    settlement.settlementTxHash = chainSettlement.settlementTxHash;
+    settlement.bridgeTxHash = chainSettlement.bridgeTxHash;
+    settlement.distributionTxHash = chainSettlement.distributionTxHash;
   } catch (err) {
     logger.warn({ err, appSessionId }, "Settlement trigger failed");
   }

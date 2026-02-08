@@ -240,6 +240,9 @@ export interface YellowSession {
   viewerBalance: string;
   totalDeposited: string;
   asset: string;
+  // Nitrolite Custody on-chain channel
+  channelId?: string | null;
+  custodyDepositTxHash?: string | null;
 }
 
 export type ViewingSession = LegacySession | YellowSession;
@@ -265,11 +268,19 @@ export interface SessionCloseResult {
   totalPaid: string;
   settled: boolean;
   segmentsDelivered: number;
+  // Nitrolite Custody on-chain channel
+  channelId: string | null;
+  custodyDepositTxHash: string | null;
+  channelCloseTxHash: string | null;
+  custodyWithdrawTxHash: string | null;
   // Cross-chain settlement tx hashes
   settlementTxHash: string | null;
   bridgeTxHash: string | null;
   distributionTxHash: string | null;
   explorerLinks: {
+    custodyDeposit: string | null;
+    channelClose: string | null;
+    custodyWithdraw: string | null;
     settlement: string | null;
     bridge: string | null;
     distribution: string | null;

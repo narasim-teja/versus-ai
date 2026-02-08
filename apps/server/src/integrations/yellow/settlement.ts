@@ -21,6 +21,11 @@ export interface SettlementResult {
   settlementTxHash: string | null; // Base Sepolia - settlement record
   bridgeTxHash: string | null; // Base Sepolia - bridge escrow
   distributionTxHash: string | null; // ARC testnet - revenue distribution
+  // Nitrolite Custody on-chain channel tx hashes
+  custodyDepositTxHash: string | null; // Base Sepolia - USDC deposited into Custody
+  channelCloseTxHash: string | null; // Base Sepolia - channel closed on-chain
+  custodyWithdrawTxHash: string | null; // Base Sepolia - funds withdrawn from Custody
+  channelId: string | null; // On-chain state channel ID
 }
 
 /**
@@ -43,7 +48,15 @@ export async function triggerSettlement(
       { appSessionId: session.appSessionId },
       "No revenue to settle (zero paid)",
     );
-    return { settlementTxHash: null, bridgeTxHash: null, distributionTxHash: null };
+    return {
+      settlementTxHash: null,
+      bridgeTxHash: null,
+      distributionTxHash: null,
+      custodyDepositTxHash: session.custodyDepositTxHash,
+      channelCloseTxHash: session.channelCloseTxHash,
+      custodyWithdrawTxHash: session.custodyWithdrawTxHash,
+      channelId: session.channelId,
+    };
   }
 
   const creatorShare = totalPaid * 0.7;
@@ -118,5 +131,13 @@ export async function triggerSettlement(
     "Settlement complete",
   );
 
-  return { settlementTxHash, bridgeTxHash, distributionTxHash };
+  return {
+    settlementTxHash,
+    bridgeTxHash,
+    distributionTxHash,
+    custodyDepositTxHash: session.custodyDepositTxHash,
+    channelCloseTxHash: session.channelCloseTxHash,
+    custodyWithdrawTxHash: session.custodyWithdrawTxHash,
+    channelId: session.channelId,
+  };
 }

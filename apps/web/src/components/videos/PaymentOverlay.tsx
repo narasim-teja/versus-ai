@@ -1,6 +1,6 @@
 "use client";
 
-import { DollarSign, Zap, Clock, Film, Wallet } from "lucide-react";
+import { DollarSign, Zap, Clock, Film, Wallet, Lock } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import type { ViewingSession, SessionStatus } from "@/lib/types";
@@ -61,6 +61,17 @@ export function PaymentOverlay({
             >
               <Wallet className="mr-1 h-3 w-3" />
               {truncateAddress(ephemeralAddress)}
+            </Badge>
+          )}
+
+          {/* On-chain Custody channel badge */}
+          {isYellow && session.channelId && (
+            <Badge
+              variant="outline"
+              className="border-orange-500/30 bg-orange-500/10 text-orange-400"
+            >
+              <Lock className="mr-1 h-3 w-3" />
+              On-Chain: {truncateAddress(session.channelId)}
             </Badge>
           )}
 

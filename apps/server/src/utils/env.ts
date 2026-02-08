@@ -44,6 +44,10 @@ const envSchema = z.object({
   BRIDGE_ESCROW_ADDRESS: z.string().startsWith("0x").optional(),
   BASE_SEPOLIA_USDC_ADDRESS: z.string().startsWith("0x").default("0x036CbD53842c5426634e7929541eC2318f3dCF7e"),
 
+  // Nitrolite Custody/Adjudicator (on-chain state channels - Base Sepolia)
+  NITROLITE_CUSTODY_ADDRESS: z.string().startsWith("0x").default("0x019B65A265EB3363822f2752141b3dF16131b262"),
+  NITROLITE_ADJUDICATOR_ADDRESS: z.string().startsWith("0x").default("0x7c7ccbc98469190849BCC6c926307794fDfB11F2"),
+
   // Supabase (video storage)
   SUPABASE_URL: z.string().url().optional(),
   SUPABASE_SERVICE_KEY: z.string().min(1).optional(),
