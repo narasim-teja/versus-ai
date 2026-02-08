@@ -245,13 +245,11 @@ async function initializeClient(): Promise<YellowClient> {
   });
 
   ws.send(authRequestMsg);
-  logger.debug("Sent auth_request to ClearNode");
 
   // Step 2: Wait for auth_challenge
   const challengeRaw = await waitForMethod(ws, "auth_challenge", 10000);
   const challengeResponse = parseAuthChallengeResponse(challengeRaw);
   const challengeMessage = challengeResponse.params.challengeMessage;
-  logger.debug("Received auth challenge");
 
   // Step 3: Sign challenge with MAIN WALLET via EIP-712 and send auth_verify
   const eip712AuthSigner = createEIP712AuthMessageSigner(
@@ -271,7 +269,6 @@ async function initializeClient(): Promise<YellowClient> {
   );
 
   ws.send(authVerifyMsg);
-  logger.debug("Sent auth_verify to ClearNode");
 
   // Step 4: Wait for auth_verify response
   const verifyRaw = await waitForMethod(ws, "auth_verify", 10000);
@@ -374,8 +371,6 @@ function handleMessage(rawData: string): void {
       }
     }
 
-    // Notifications (server-initiated) - log them
-    logger.debug({ message: parsed }, "Yellow ClearNode notification");
   } catch {
     logger.warn({ rawData }, "Failed to parse Yellow ClearNode message");
   }

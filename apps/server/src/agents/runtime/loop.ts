@@ -109,13 +109,7 @@ class AgentRuntime {
     }
 
     this.isCycleRunning = true;
-    const cycleStart = Date.now();
     this.currentCycle++;
-
-    logger.info(
-      { agentId: this.config.id, cycle: this.currentCycle },
-      "Starting decision cycle"
-    );
 
     try {
       // Step 1: Read state (pass recent tx hashes from last cycle)
@@ -134,19 +128,6 @@ class AgentRuntime {
 
       // Step 4: Execute actions (if any)
       if (decision.actions.length > 0) {
-        logger.info(
-          {
-            agentId: this.config.id,
-            actionsCount: decision.actions.length,
-            actions: decision.actions.map((a) => ({
-              type: a.type,
-              reason: a.reason,
-              priority: a.priority,
-            })),
-          },
-          "Executing actions"
-        );
-
         const executionResults = await executeActions(
           decision.actions,
           this.config
@@ -165,35 +146,11 @@ class AgentRuntime {
           (r) => !r.success && !r.error
         ).length;
 
-        const successCount = executionResults.filter((r) => r.success).length;
-        const failCount = executionResults.length - successCount;
-
-        logger.info(
-          {
-            agentId: this.config.id,
-            totalActions: executionResults.length,
-            successCount,
-            failCount,
-          },
-          "Actions execution complete"
-        );
       }
 
       // Update status
       this.lastDecisionTime = new Date();
       this.lastError = null;
-
-      const cycleDuration = Date.now() - cycleStart;
-      logger.info(
-        {
-          agentId: this.config.id,
-          cycle: this.currentCycle,
-          actionsCount: decision.actions.length,
-          urgent: decision.urgent,
-          durationMs: cycleDuration,
-        },
-        "Decision cycle complete"
-      );
 
       return decision;
     } catch (error) {

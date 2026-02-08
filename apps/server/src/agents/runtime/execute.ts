@@ -120,16 +120,6 @@ export async function executeActions(
   const sortedActions = [...actions].sort((a, b) => b.priority - a.priority);
 
   for (const action of sortedActions) {
-    logger.info(
-      {
-        agentId: config.id,
-        actionType: action.type,
-        priority: action.priority,
-        reason: action.reason,
-      },
-      "Executing action"
-    );
-
     try {
       const result = await executeAction(action, config);
       results.push(result);
@@ -142,15 +132,6 @@ export async function executeActions(
             error: result.error,
           },
           "Action execution failed"
-        );
-      } else {
-        logger.info(
-          {
-            agentId: config.id,
-            actionType: action.type,
-            txHash: result.txHash,
-          },
-          "Action executed successfully"
         );
       }
     } catch (error) {
@@ -760,15 +741,6 @@ async function ensureApproval(
 
     // If allowance is sufficient, no approval needed
     if (allowance >= requiredAmount) {
-      logger.debug(
-        {
-          tokenAddress,
-          spenderAddress,
-          currentAllowance: allowance.toString(),
-          requiredAmount: requiredAmount.toString(),
-        },
-        "Sufficient allowance exists"
-      );
       return null;
     }
 

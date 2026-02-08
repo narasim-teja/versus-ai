@@ -231,10 +231,6 @@ export function watchBondingCurveEvents(
             usdcOut: bigint;
             newPrice: bigint;
           };
-          logger.debug(
-            { event: "TokensSold", address: addrShort, args },
-            "Bonding curve sale event"
-          );
           callbacks.onSale!(
             {
               seller: args.seller,
@@ -271,10 +267,6 @@ export function watchBondingCurveEvents(
             amount: bigint;
             newRevenuePerToken: bigint;
           };
-          logger.debug(
-            { event: "RevenueAdded", address: addrShort, args },
-            "Revenue added event"
-          );
           callbacks.onRevenueAdded!(
             {
               amount: args.amount,
@@ -309,10 +301,6 @@ export function watchBondingCurveEvents(
             user: Address;
             amount: bigint;
           };
-          logger.debug(
-            { event: "RevenueClaimed", address: addrShort, args },
-            "Revenue claimed event"
-          );
           callbacks.onRevenueClaimed!(
             {
               user: args.user,

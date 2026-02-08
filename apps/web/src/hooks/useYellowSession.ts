@@ -133,14 +133,9 @@ export function useYellowSession() {
         stateRef.current = newState;
         setStatus("session_active");
 
-        console.log(
-          `[Yellow] Session active: ${data.appSessionId}, ephemeral: ${client.ephemeralAddress}`
-        );
-
         // Co-sign the Custody channel state if server prepared one
         if (data.custodyChannelData?.packedStateHex) {
           try {
-            console.log("[Yellow] Signing custody channel state...");
             const signature = await signChannelState(
               data.custodyChannelData.packedStateHex,
               client.ephemeralPrivateKey,
@@ -164,15 +159,12 @@ export function useYellowSession() {
               };
               setState(updated);
               stateRef.current = updated;
-              console.log(
-                `[Yellow] Custody channel opened! channelId: ${custodyResult.channelId}, tx: ${custodyResult.custodyDepositTxHash}`
-              );
             } else {
-              console.warn("[Yellow] Custody sign endpoint failed:", custodyRes.status);
+              console.warn(`[Yellow] Custody sign failed: ${custodyRes.status}`);
             }
           } catch (custodyErr) {
             // Non-fatal — streaming still works via ClearNode
-            console.warn("[Yellow] Custody channel signing failed (non-fatal):", custodyErr);
+            console.warn("[Yellow] Custody signing failed (non-fatal):", custodyErr);
           }
         }
       } catch (err) {
@@ -245,7 +237,6 @@ export function useYellowSession() {
         ];
 
         // Sign with session signer (ephemeral key)
-        const requestBytes = new TextEncoder().encode(JSON.stringify(request));
         const signature = await client.sessionSigner(request as RPCData);
 
         const signedMessage = JSON.stringify({
@@ -268,10 +259,10 @@ export function useYellowSession() {
             const keyBytes = new Uint8Array(keyBuffer);
             verified = verifySegmentProof(keyBytes, merkleProof);
             if (!verified) {
-              console.warn(`[Yellow] Merkle proof verification FAILED for segment ${segmentIndex}`);
+              console.warn(`[Yellow] Merkle proof failed for segment ${segmentIndex}`);
             }
           } catch (err) {
-            console.warn("[Yellow] Merkle verification error:", err);
+            console.warn("[Yellow] Merkle verify error:", err);
           }
         }
 
@@ -327,9 +318,8 @@ export function useYellowSession() {
               current.closeStateHash as `0x${string}`,
               clientRef.current.ephemeralPrivateKey,
             );
-            console.log("[Yellow] Signed custody close state");
           } catch (signErr) {
-            console.warn("[Yellow] Failed to sign close state (non-fatal):", signErr);
+            console.warn("[Yellow] Close state sign failed:", signErr);
           }
         }
 

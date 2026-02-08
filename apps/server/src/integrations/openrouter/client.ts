@@ -55,7 +55,6 @@ export async function chatCompletion(
   const timeSinceLast = now - lastRequestTime;
   if (timeSinceLast < MIN_REQUEST_GAP_MS) {
     const waitMs = MIN_REQUEST_GAP_MS - timeSinceLast;
-    logger.debug({ waitMs }, "Rate limiting OpenRouter request");
     await new Promise((resolve) => setTimeout(resolve, waitMs));
   }
 

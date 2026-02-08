@@ -38,7 +38,6 @@ export async function seedAgents(agentConfigs: AgentConfig[]): Promise<void> {
       });
 
       if (existing) {
-        logger.debug({ agentId: config.id }, "Agent record already exists in DB");
         continue;
       }
 

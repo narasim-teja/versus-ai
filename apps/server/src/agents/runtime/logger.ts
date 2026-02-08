@@ -150,12 +150,10 @@ export function subscribeToDecisions(
   }
 
   agentListeners.add(listener);
-  logger.debug({ agentId }, "Decision listener subscribed");
 
   // Return unsubscribe function
   return () => {
     agentListeners?.delete(listener);
-    logger.debug({ agentId }, "Decision listener unsubscribed");
   };
 }
 

@@ -51,7 +51,6 @@ export async function registerVideoOnChain(
   totalSegments: number,
 ): Promise<string | null> {
   if (!isBaseSepoliaConfigured()) {
-    logger.debug("Base Sepolia not configured, skipping video registration");
     return null;
   }
 
@@ -105,7 +104,6 @@ export async function recordSettlementOnChain(
   yellowSessionId: string,
 ): Promise<string | null> {
   if (!isBaseSepoliaConfigured()) {
-    logger.debug("Base Sepolia not configured, skipping settlement record");
     return null;
   }
 
@@ -156,7 +154,6 @@ export async function initiateBridgeOnChain(
   creatorTokenAddress: string,
 ): Promise<string | null> {
   if (!isBridgeConfigured()) {
-    logger.debug("Bridge escrow not configured, skipping bridge");
     return null;
   }
 
@@ -215,7 +212,6 @@ export async function distributeRevenueOnChain(
   totalPaid: string,
 ): Promise<string | null> {
   if (!isArcSettlementConfigured()) {
-    logger.debug("ARC settlement not configured, skipping distribution");
     return null;
   }
 

@@ -230,6 +230,7 @@ export function VideoPlayer({ video, onSessionStateChange }: VideoPlayerProps) {
         className="aspect-video w-full"
         controls={playerReady}
         playsInline
+        poster={video.thumbnailUri ?? undefined}
       />
 
       {/* Pre-session state: show "Start Watching" button with pricing */}

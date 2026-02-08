@@ -59,7 +59,6 @@ export async function llmDecide(
   config: AgentConfig
 ): Promise<DecisionResult> {
   if (!isOpenRouterConfigured()) {
-    logger.debug({ agentId: config.id }, "OpenRouter not configured, using rule-based decisions");
     return decide(state, config);
   }
 

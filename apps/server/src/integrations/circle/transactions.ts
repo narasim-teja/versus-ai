@@ -151,11 +151,6 @@ export async function waitForConfirmation(
   while (Date.now() - startTime < timeoutMs) {
     const status = await getTransactionStatus(transactionId);
 
-    logger.debug(
-      { transactionId, state: status.state, txHash: status.txHash },
-      "Transaction status poll"
-    );
-
     // Terminal success states
     if (status.state === "COMPLETE" || status.state === "CONFIRMED") {
       logger.info(

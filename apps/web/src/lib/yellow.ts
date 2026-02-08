@@ -70,10 +70,6 @@ export async function connectToClearNode(): Promise<YellowBrowserClient> {
     transport: http(),
   });
 
-  console.log(
-    `[Yellow] Connecting to ClearNode as ${ephemeralAddress}...`
-  );
-
   // Connect WebSocket
   const ws = await connectWebSocket(config.clearNodeUrl);
 
@@ -182,12 +178,10 @@ export async function connectToClearNode(): Promise<YellowBrowserClient> {
   });
 
   ws.send(authRequestMsg);
-  console.log("[Yellow] Sent auth_request");
 
   // Step 2: Wait for auth_challenge
   const challengeRaw = await waitForMethod(ws, "auth_challenge", 10000);
   const challengeResponse = JSON.parse(challengeRaw);
-  console.log("[Yellow] Received auth_challenge");
 
   // Step 3: Sign with EIP-712 and send auth_verify
   const eip712AuthSigner = createEIP712AuthMessageSigner(
@@ -207,7 +201,6 @@ export async function connectToClearNode(): Promise<YellowBrowserClient> {
   );
 
   ws.send(authVerifyMsg);
-  console.log("[Yellow] Sent auth_verify");
 
   // Step 4: Wait for auth_verify response
   const verifyRaw = await waitForMethod(ws, "auth_verify", 10000);
@@ -224,9 +217,6 @@ export async function connectToClearNode(): Promise<YellowBrowserClient> {
   }
 
   client.isAuthenticated = true;
-  console.log(
-    `[Yellow] Authenticated! Ephemeral: ${ephemeralAddress}, Session: ${sessionAccount.address}`
-  );
 
   return client;
 }
@@ -244,13 +234,11 @@ export async function requestFaucetTokens(address: string): Promise<void> {
         body: JSON.stringify({ userAddress: address }),
       }
     );
-    if (res.ok) {
-      console.log(`[Yellow] Faucet tokens requested for ${address}`);
-    } else {
+    if (!res.ok) {
       console.warn(`[Yellow] Faucet request failed: ${res.status}`);
     }
-  } catch (err) {
-    console.warn("[Yellow] Faucet request error:", err);
+  } catch {
+    // Faucet is best-effort, ignore errors
   }
 }
 
@@ -267,7 +255,6 @@ export async function signChannelState(
   const signature = await account.signMessage({
     message: { raw: packedStateHex },
   });
-  console.log("[Yellow] Signed custody channel state with ephemeral key");
   return signature;
 }
 
@@ -277,7 +264,6 @@ export async function signChannelState(
 export function disconnectClearNode(client: YellowBrowserClient): void {
   client.isAuthenticated = false;
   client.destroy();
-  console.log("[Yellow] Disconnected from ClearNode");
 }
 
 // ─── Internal Helpers ────────────────────────────────────────────────

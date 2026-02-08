@@ -460,11 +460,6 @@ streamingRoutes.post("/:videoId/cosign", async (c) => {
       })
       .where(eq(yellowSessions.id, appSessionId));
 
-    logger.debug(
-      { appSessionId, segmentIndex, version, newBalance: result.newViewerBalance },
-      "Cosign successful, delivering key",
-    );
-
     // Payment confirmed — deliver the AES key
     return await deliverSegmentKey(c, videoId, segmentIndex);
   } catch (err) {

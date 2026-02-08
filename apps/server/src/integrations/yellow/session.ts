@@ -232,10 +232,6 @@ export async function cosignAndSubmitPayment(
 
   // Deduplication: if this segment was already paid for, return current balance without charging
   if (session.paidSegments.has(segmentIndex)) {
-    logger.debug(
-      { appSessionId, segmentIndex },
-      "Segment already paid for, skipping charge",
-    );
     return { success: true, newViewerBalance: session.viewerBalance };
   }
 
@@ -314,10 +310,6 @@ export async function cosignAndSubmitPayment(
     // Submit to ClearNode — server co-signs via its authenticated session
     await client.sendAndWait(stateUpdateMsg, 10000);
 
-    logger.debug(
-      { appSessionId, segmentIndex, version, newViewerBalance },
-      "ClearNode state update confirmed",
-    );
   } catch (err) {
     // ClearNode submission failed — still update local state
     // This ensures video playback continues even if ClearNode has issues
@@ -334,17 +326,6 @@ export async function cosignAndSubmitPayment(
   session.version = version;
   session.lastPaymentAt = Date.now();
   session.paidSegments.add(segmentIndex);
-
-  logger.debug(
-    {
-      appSessionId,
-      segmentIndex,
-      viewerBalance: newViewerBalance,
-      creatorBalance: newCreatorBalance,
-      delivered: session.segmentsDelivered,
-    },
-    "Segment payment processed",
-  );
 
   return { success: true, newViewerBalance };
 }
@@ -364,10 +345,6 @@ export async function processSegmentPayment(
 
   // Deduplication: if this segment was already paid for, return current balance without charging
   if (session.paidSegments.has(segmentIndex)) {
-    logger.debug(
-      { appSessionId, segmentIndex },
-      "Segment already paid for, skipping charge",
-    );
     return { success: true, newViewerBalance: session.viewerBalance };
   }
 
@@ -398,17 +375,6 @@ export async function processSegmentPayment(
   session.version += 1;
   session.lastPaymentAt = Date.now();
   session.paidSegments.add(segmentIndex);
-
-  logger.debug(
-    {
-      appSessionId,
-      segmentIndex,
-      viewerBalance: newViewerBalance,
-      creatorBalance: newCreatorBalance,
-      delivered: session.segmentsDelivered,
-    },
-    "Segment payment processed (server-managed)",
-  );
 
   return { success: true, newViewerBalance };
 }

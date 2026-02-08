@@ -74,7 +74,6 @@ async function refreshCreatorCache(): Promise<void> {
   cachedTokenToBondingCurve = newMap;
   cachedCreatorInfos = newInfos;
   creatorCacheTimestamp = now;
-  logger.debug({ creatorCount: newMap.size }, "Creator mapping cache refreshed");
 }
 
 /**
@@ -138,10 +137,6 @@ async function readUsdcBalance(agentId: string, evmAddress: Address): Promise<bi
       const circleWallet = await getWalletByAgentId(agentId);
       if (circleWallet) {
         const balance = await getCircleUsdcBalance(circleWallet.id);
-        logger.debug(
-          { agentId, circleWalletId: circleWallet.id, balance: balance.toString() },
-          "Read USDC balance from Circle wallet"
-        );
         return balance;
       }
     } catch (error) {
@@ -210,8 +205,7 @@ async function readLoanInfo(agentAddress: Address): Promise<LoanInfo | null> {
       currentLTV,
       liquidationPrice,
     };
-  } catch (error) {
-    logger.debug({ agentAddress, error }, "No active loan or error reading loan");
+  } catch {
     return null;
   }
 }
@@ -357,8 +351,6 @@ async function readOtherCreators(
 export async function readAgentState(config: AgentConfig, pendingTxs: string[] = []): Promise<AgentState> {
   const timestamp = Date.now();
   const cycle = getCycle(config.id);
-
-  logger.debug({ agentId: config.id, cycle }, "Reading agent state");
 
   try {
     // Sequential reads to avoid ARC testnet RPC rate limit (20 req/s)
