@@ -1,16 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Film, Clock, Layers, Loader2, ShieldCheck } from "lucide-react";
 import { Header } from "@/components/layout/Header";
 import { VideoPlayer } from "@/components/videos/VideoPlayer";
+import { SettlementSummary } from "@/components/videos/SettlementSummary";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Separator } from "@/components/ui/Separator";
 import { fetchVideo } from "@/lib/api";
 import { formatDuration } from "@/lib/format";
-import type { VideoDetail } from "@/lib/types";
+import type { VideoDetail, SessionCloseResult } from "@/lib/types";
+import type { SessionState } from "@/hooks/useVideoSession";
 
 export default function VideoPage() {
   const params = useParams<{ videoId: string }>();
@@ -18,6 +20,16 @@ export default function VideoPage() {
   const [video, setVideo] = useState<VideoDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [sessionState, setSessionState] = useState<SessionState>("idle");
+  const [settlement, setSettlement] = useState<SessionCloseResult | null>(null);
+
+  const handleSessionStateChange = useCallback(
+    (state: SessionState, result: SessionCloseResult | null) => {
+      setSessionState(state);
+      if (result) setSettlement(result);
+    },
+    []
+  );
 
   useEffect(() => {
     let mounted = true;
@@ -76,7 +88,15 @@ export default function VideoPage() {
         {video && (
           <div className="mx-auto max-w-4xl space-y-6">
             {/* Player */}
-            <VideoPlayer video={video} />
+            <VideoPlayer
+              video={video}
+              onSessionStateChange={handleSessionStateChange}
+            />
+
+            {/* Settlement summary (shown below player after session close) */}
+            {sessionState === "closed" && settlement && (
+              <SettlementSummary result={settlement} />
+            )}
 
             {/* Video info */}
             <div>

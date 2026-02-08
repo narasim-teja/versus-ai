@@ -11,6 +11,8 @@
   },
   "dependencies": {
     "@circle-fin/w3s-pw-web-sdk": "^1.1.11",
+    "@erc7824/nitrolite": "^0.5.3",
+    "@noble/hashes": "^1.7.0",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-dropdown-menu": "^2.1.0",
     "@radix-ui/react-progress": "^1.1.8",
@@ -20,15 +22,14 @@
     "@radix-ui/react-tabs": "^1.1.13",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "@erc7824/nitrolite": "^0.5.3",
     "hls.js": "^1.6.15",
-    "viem": "^2.21.0",
     "lucide-react": "^0.563.0",
     "next": "14.2.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
     "tailwind-merge": "^3.4.0",
-    "tailwindcss-animate": "^1.0.7"
+    "tailwindcss-animate": "^1.0.7",
+    "viem": "^2.21.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

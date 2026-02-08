@@ -2,19 +2,23 @@
 
 import { useEffect, useRef, useCallback, useState } from "react";
 import Hls from "hls.js";
-import { Loader2, AlertCircle, Play } from "lucide-react";
+import { Loader2, AlertCircle, Play, DollarSign, Clock, Film } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { Badge } from "@/components/ui/Badge";
 import { PaymentOverlay } from "./PaymentOverlay";
-import { SettlementSummary } from "./SettlementSummary";
+import { ClosingOverlay } from "./ClosingOverlay";
 import { useVideoSession } from "@/hooks/useVideoSession";
 import { useWallet } from "@/components/wallet/WalletProvider";
-import type { VideoDetail } from "@/lib/types";
+import { config } from "@/lib/config";
+import type { VideoDetail, SessionCloseResult } from "@/lib/types";
+import type { SessionState } from "@/hooks/useVideoSession";
 
 interface VideoPlayerProps {
   video: VideoDetail;
+  onSessionStateChange?: (state: SessionState, settlement: SessionCloseResult | null) => void;
 }
 
-export function VideoPlayer({ video }: VideoPlayerProps) {
+export function VideoPlayer({ video, onSessionStateChange }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const {
@@ -30,6 +34,7 @@ export function VideoPlayer({ video }: VideoPlayerProps) {
     isYellowCosign,
     ephemeralAddress,
     settlementResult,
+    segmentsVerified,
   } = useVideoSession();
   const { walletAddress, isConnected } = useWallet();
   const [playerReady, setPlayerReady] = useState(false);
@@ -202,6 +207,11 @@ export function VideoPlayer({ video }: VideoPlayerProps) {
     }
   }, [sessionState]);
 
+  // Notify parent of session state changes
+  useEffect(() => {
+    onSessionStateChange?.(sessionState, settlementResult);
+  }, [sessionState, settlementResult, onSessionStateChange]);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -222,22 +232,60 @@ export function VideoPlayer({ video }: VideoPlayerProps) {
         playsInline
       />
 
-      {/* Pre-session state: show "Start Watching" button */}
-      {sessionState === "idle" && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black/60">
-          <Play className="h-12 w-12 text-white/80" />
-          <Button onClick={handleStartWatching} size="lg">
-            {isConnected
-              ? "Start Watching"
-              : "Start Watching"}
-          </Button>
-          <p className="max-w-md text-center text-xs text-muted-foreground">
-            {isConnected
-              ? "Pay-per-second streaming via Yellow Network state channel"
-              : "Connect wallet in the header for pay-per-second micropayments"}
-          </p>
-        </div>
-      )}
+      {/* Pre-session state: show "Start Watching" button with pricing */}
+      {sessionState === "idle" && (() => {
+        const pricePerSegment = parseFloat(config.yellowPricePerSegment);
+        const segmentsPerMinute = 60 / 5;
+        const costPerMinute = (pricePerSegment * segmentsPerMinute).toFixed(2);
+        const totalCost = video.totalSegments
+          ? (video.totalSegments * pricePerSegment).toFixed(2)
+          : null;
+
+        return (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black/60">
+            <Play className="h-12 w-12 text-white/80" />
+            <Button onClick={handleStartWatching} size="lg">
+              Start Watching
+            </Button>
+
+            <div className="flex flex-col items-center gap-2">
+              <p className="text-xs text-muted-foreground">
+                {isConnected
+                  ? "Pay-per-segment streaming via Yellow Network state channel"
+                  : "Connect wallet in the header for pay-per-segment micropayments"}
+              </p>
+
+              {isConnected && (
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  <Badge
+                    variant="outline"
+                    className="border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+                  >
+                    <DollarSign className="mr-1 h-3 w-3" />
+                    ${config.yellowPricePerSegment}/segment
+                  </Badge>
+                  <Badge
+                    variant="outline"
+                    className="border-zinc-500/30 text-zinc-400"
+                  >
+                    <Clock className="mr-1 h-3 w-3" />
+                    ~${costPerMinute}/min
+                  </Badge>
+                  {totalCost && (
+                    <Badge
+                      variant="outline"
+                      className="border-zinc-500/30 text-zinc-400"
+                    >
+                      <Film className="mr-1 h-3 w-3" />
+                      {video.totalSegments} segments (~${totalCost} total)
+                    </Badge>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Creating session spinner */}
       {sessionState === "creating" && (
@@ -262,11 +310,19 @@ export function VideoPlayer({ video }: VideoPlayerProps) {
         </div>
       )}
 
-      {/* Closed state */}
+      {/* Closing state — settlement progress */}
+      {sessionState === "closing" && (
+        <ClosingOverlay
+          hasCustodyChannel={
+            !!(session && session.type === "yellow" && session.channelId)
+          }
+        />
+      )}
+
+      {/* Closed state — settlement summary is rendered below the player by the page */}
       {sessionState === "closed" && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/80 overflow-y-auto p-4">
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/80">
           <p className="text-sm text-muted-foreground">Session ended</p>
-          {settlementResult && <SettlementSummary result={settlementResult} />}
           <Button onClick={handleStartWatching}>Watch Again</Button>
         </div>
       )}
@@ -281,6 +337,7 @@ export function VideoPlayer({ video }: VideoPlayerProps) {
           onClose={endSession}
           ephemeralAddress={ephemeralAddress}
           isStateChanelSession={isYellowCosign}
+          segmentsVerified={segmentsVerified}
         />
       )}
     </div>

@@ -771,7 +771,36 @@ async function deliverSegmentKey(c: any, videoId: string, segmentIndex: number) 
     return c.json({ error: "Segment index out of range" }, 400);
   }
 
-  const key = getSegmentKeyRaw(decryptSecret(video[0].masterSecret!), videoId, segmentIndex);
+  const decryptedSecret = decryptSecret(video[0].masterSecret!);
+
+  // If merkle tree data is available, return key with proof in header
+  if (video[0].merkleTreeData) {
+    const keyResponse = getSegmentKey(
+      decryptedSecret,
+      video[0].merkleTreeData,
+      videoId,
+      segmentIndex,
+    );
+    if (!keyResponse) {
+      return c.json({ error: "Failed to derive key" }, 500);
+    }
+    const rawKey = getSegmentKeyRaw(decryptedSecret, videoId, segmentIndex);
+    if (!rawKey) {
+      return c.json({ error: "Failed to derive key" }, 500);
+    }
+    return new Response(rawKey, {
+      headers: {
+        "Content-Type": "application/octet-stream",
+        "Content-Length": rawKey.length.toString(),
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Expose-Headers": "X-Merkle-Proof",
+        "X-Merkle-Proof": JSON.stringify(keyResponse.proof),
+      },
+    });
+  }
+
+  // Fallback: no merkle tree data available
+  const key = getSegmentKeyRaw(decryptedSecret, videoId, segmentIndex);
   if (!key) {
     return c.json({ error: "Failed to derive key" }, 500);
   }

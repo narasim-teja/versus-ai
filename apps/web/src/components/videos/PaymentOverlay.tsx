@@ -1,6 +1,6 @@
 "use client";
 
-import { DollarSign, Zap, Clock, Film, Wallet, Lock } from "lucide-react";
+import { DollarSign, Zap, Clock, Film, Wallet, Lock, ShieldCheck } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import type { ViewingSession, SessionStatus } from "@/lib/types";
@@ -14,6 +14,7 @@ interface PaymentOverlayProps {
   onClose: () => void;
   ephemeralAddress?: string | null;
   isStateChanelSession?: boolean;
+  segmentsVerified?: number;
 }
 
 function truncateAddress(address: string): string {
@@ -27,6 +28,7 @@ export function PaymentOverlay({
   onClose,
   ephemeralAddress,
   isStateChanelSession,
+  segmentsVerified,
 }: PaymentOverlayProps) {
   if (!session) return null;
 
@@ -105,6 +107,17 @@ export function PaymentOverlay({
             >
               <Clock className="mr-1 h-3 w-3" />
               {formatDuration(sessionStatus.secondsWatched)}
+            </Badge>
+          )}
+
+          {/* Merkle proof verification badge */}
+          {isStateChanelSession && segmentsVerified != null && segmentsVerified > 0 && (
+            <Badge
+              variant="outline"
+              className="border-green-500/30 bg-green-500/10 text-green-400"
+            >
+              <ShieldCheck className="mr-1 h-3 w-3" />
+              Merkle Verified: {segmentsVerified}
             </Badge>
           )}
         </div>

@@ -1,5 +1,7 @@
 "use client";
 
+import { DollarSign, Film, ExternalLink } from "lucide-react";
+import { Badge } from "@/components/ui/Badge";
 import type { SessionCloseResult } from "@/lib/types";
 
 interface SettlementSummaryProps {
@@ -40,19 +42,7 @@ function TxCard({
           className="inline-flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 font-mono"
         >
           {truncatedHash}
-          <svg
-            className="w-3 h-3"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
-            />
-          </svg>
+          <ExternalLink className="w-3 h-3" />
         </a>
       ) : (
         <span className="text-xs font-mono text-zinc-500">{truncatedHash}</span>
@@ -72,15 +62,41 @@ export function SettlementSummary({ result }: SettlementSummaryProps) {
   if (!hasTxHashes) return null;
 
   return (
-    <div className="mt-3 space-y-2">
-      <div className="flex items-center gap-2 mb-2">
-        <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-        <span className="text-xs font-semibold text-green-400">
-          Cross-Chain Settlement Complete
-        </span>
+    <div className="rounded-xl border border-zinc-700 bg-zinc-900/80 p-4 space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+          <span className="text-sm font-semibold text-green-400">
+            Cross-Chain Settlement Complete
+          </span>
+        </div>
       </div>
 
-      <div className="grid gap-2">
+      {/* Cost summary */}
+      <div className="flex flex-wrap gap-2">
+        {result.totalPaid && (
+          <Badge
+            variant="outline"
+            className="border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+          >
+            <DollarSign className="mr-1 h-3 w-3" />
+            Total Paid: ${result.totalPaid}
+          </Badge>
+        )}
+        {result.segmentsDelivered > 0 && (
+          <Badge
+            variant="outline"
+            className="border-zinc-500/30 text-zinc-400"
+          >
+            <Film className="mr-1 h-3 w-3" />
+            {result.segmentsDelivered} segments delivered
+          </Badge>
+        )}
+      </div>
+
+      {/* Transaction cards - 2 column grid on md+ */}
+      <div className="grid gap-2 md:grid-cols-2">
         <TxCard
           label="Custody Deposit"
           chain="Base Sepolia"

@@ -2,6 +2,7 @@ import {
   createPublicClient,
   createWalletClient,
   http,
+  nonceManager,
   type Chain,
   type PublicClient,
   type WalletClient,
@@ -58,6 +59,7 @@ export function createAgentWalletClient(
   privateKey: `0x${string}`
 ): WalletClient<Transport, Chain, Account> {
   const account = privateKeyToAccount(privateKey);
+  account.nonceManager = nonceManager;
   return createWalletClient({
     account,
     chain: arcTestnet,

@@ -10,6 +10,7 @@ import {
 } from "@/lib/yellow";
 import { cosignAndGetKey } from "@/lib/api";
 import { config } from "@/lib/config";
+import { verifySegmentProof } from "@/lib/merkle-verify";
 import type { SessionCloseResult } from "@/lib/types";
 import { RPCData } from "@erc7824/nitrolite";
 
@@ -37,6 +38,8 @@ export interface YellowSessionState {
   pricePerSegment: string;
   totalDeposited: string;
   closeStateHash: string | null;
+  channelId: string | null;
+  segmentsVerified: number;
 }
 
 const initialState: YellowSessionState = {
@@ -51,6 +54,8 @@ const initialState: YellowSessionState = {
   pricePerSegment: config.yellowPricePerSegment,
   totalDeposited: "0",
   closeStateHash: null,
+  channelId: null,
+  segmentsVerified: 0,
 };
 
 // ─── Hook ────────────────────────────────────────────────────────────
@@ -67,6 +72,9 @@ export function useYellowSession() {
 
   // Mutex queue — serialize concurrent key requests so version increments by 1
   const keyQueueRef = useRef<Promise<void>>(Promise.resolve());
+
+  // Track paid segments to prevent double-counting during seek
+  const paidSegmentsRef = useRef<Set<number>>(new Set());
 
   /**
    * Connect to ClearNode, authenticate, and create a streaming session.
@@ -117,6 +125,8 @@ export function useYellowSession() {
           pricePerSegment: data.pricePerSegment || config.yellowPricePerSegment,
           totalDeposited: data.totalDeposited || depositAmount,
           closeStateHash: null,
+          channelId: null,
+          segmentsVerified: 0,
         };
 
         setState(newState);
@@ -147,11 +157,13 @@ export function useYellowSession() {
 
             if (custodyRes.ok) {
               const custodyResult = await custodyRes.json();
-              if (custodyResult.closeStateHash) {
-                const updated = { ...stateRef.current, closeStateHash: custodyResult.closeStateHash };
-                setState(updated);
-                stateRef.current = updated;
-              }
+              const updated = {
+                ...stateRef.current,
+                closeStateHash: custodyResult.closeStateHash || stateRef.current.closeStateHash,
+                channelId: custodyResult.channelId || null,
+              };
+              setState(updated);
+              stateRef.current = updated;
               console.log(
                 `[Yellow] Custody channel opened! channelId: ${custodyResult.channelId}, tx: ${custodyResult.custodyDepositTxHash}`
               );
@@ -241,22 +253,45 @@ export function useYellowSession() {
           sig: [signature],
         });
 
-        // POST to cosign endpoint — returns raw AES key
-        const keyBuffer = await cosignAndGetKey(videoId, {
+        // POST to cosign endpoint — returns AES key + optional merkle proof
+        const { keyBuffer, merkleProof } = await cosignAndGetKey(videoId, {
           appSessionId: current.appSessionId,
           segmentIndex,
           version: newVersion,
           signedMessage,
         });
 
+        // Verify merkle proof if available
+        let verified = false;
+        if (merkleProof) {
+          try {
+            const keyBytes = new Uint8Array(keyBuffer);
+            verified = verifySegmentProof(keyBytes, merkleProof);
+            if (!verified) {
+              console.warn(`[Yellow] Merkle proof verification FAILED for segment ${segmentIndex}`);
+            }
+          } catch (err) {
+            console.warn("[Yellow] Merkle verification error:", err);
+          }
+        }
+
         // Update local state after successful cosign
+        const alreadyPaid = paidSegmentsRef.current.has(segmentIndex);
         const updatedState: YellowSessionState = {
           ...stateRef.current,
           viewerBalance: newViewerBalance,
           serverBalance: newServerBalance,
           version: newVersion,
-          segmentsDelivered: stateRef.current.segmentsDelivered + 1,
+          segmentsDelivered: alreadyPaid
+            ? stateRef.current.segmentsDelivered
+            : stateRef.current.segmentsDelivered + 1,
+          segmentsVerified: verified
+            ? stateRef.current.segmentsVerified + 1
+            : stateRef.current.segmentsVerified,
         };
+        if (!alreadyPaid) {
+          paidSegmentsRef.current.add(segmentIndex);
+        }
         setState(updatedState);
         stateRef.current = updatedState;
 
@@ -321,6 +356,7 @@ export function useYellowSession() {
       clientRef.current = null;
     }
 
+    paidSegmentsRef.current.clear();
     setState(initialState);
     stateRef.current = initialState;
     setStatus("closed");

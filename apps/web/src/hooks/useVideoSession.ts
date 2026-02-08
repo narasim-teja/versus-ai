@@ -19,6 +19,9 @@ export type SessionState =
   | "closed"
   | "error";
 
+/** Duration of each HLS segment in seconds */
+const SEGMENT_DURATION_SECONDS = 5;
+
 interface UseVideoSessionReturn {
   session: ViewingSession | null;
   sessionState: SessionState;
@@ -42,6 +45,8 @@ interface UseVideoSessionReturn {
   ephemeralAddress: string | null;
   /** Settlement result after session close (cross-chain tx hashes) */
   settlementResult: SessionCloseResult | null;
+  /** Number of segments with verified merkle proofs */
+  segmentsVerified: number;
 }
 
 export function useVideoSession(): UseVideoSessionReturn {
@@ -89,7 +94,11 @@ export function useVideoSession(): UseVideoSessionReturn {
           // or it triggers player re-initialization loop
           const appSessionId = yellow.state.appSessionId!;
           setSession((prev: ViewingSession | null) => {
-            if (prev && prev.type === "yellow" && prev.appSessionId === appSessionId) {
+            if (
+              prev && prev.type === "yellow" &&
+              prev.appSessionId === appSessionId &&
+              prev.channelId === (yellow.state.channelId || null)
+            ) {
               return prev; // same reference, no re-render
             }
             return {
@@ -101,6 +110,7 @@ export function useVideoSession(): UseVideoSessionReturn {
               viewerBalance: yellow.state.viewerBalance,
               totalDeposited: yellow.state.totalDeposited,
               asset: config.yellowAsset,
+              channelId: yellow.state.channelId || null,
             };
           });
         }
@@ -128,7 +138,6 @@ export function useVideoSession(): UseVideoSessionReturn {
   useEffect(() => {
     if (!isYellowCosign || yellow.status !== "session_active") return;
 
-    const segmentDuration = 5;
     setSessionStatus({
       appSessionId: yellow.state.appSessionId || "",
       videoId: yellow.state.videoId || "",
@@ -137,7 +146,7 @@ export function useVideoSession(): UseVideoSessionReturn {
       creatorBalance: yellow.state.serverBalance,
       totalDeposited: yellow.state.totalDeposited,
       segmentsDelivered: yellow.state.segmentsDelivered,
-      secondsWatched: yellow.state.segmentsDelivered * segmentDuration,
+      secondsWatched: yellow.state.segmentsDelivered * SEGMENT_DURATION_SECONDS,
       pricePerSegment: yellow.state.pricePerSegment,
       asset: config.yellowAsset,
     });
@@ -268,5 +277,6 @@ export function useVideoSession(): UseVideoSessionReturn {
     isYellowCosign,
     ephemeralAddress: yellow.state.ephemeralAddress,
     settlementResult: yellow.settlementResult,
+    segmentsVerified: yellow.state.segmentsVerified,
   };
 }

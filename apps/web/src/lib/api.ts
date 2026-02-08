@@ -169,9 +169,15 @@ export async function closeSession(
   );
 }
 
+/** Result from cosign including optional merkle proof */
+export interface CosignResult {
+  keyBuffer: ArrayBuffer;
+  merkleProof: import("./merkle-verify").MerkleProof | null;
+}
+
 /**
  * Co-sign a state update and get the raw AES decryption key.
- * Returns ArrayBuffer (16-byte key) instead of JSON.
+ * Returns the key buffer and optional merkle proof from response header.
  */
 export async function cosignAndGetKey(
   videoId: string,
@@ -181,7 +187,7 @@ export async function cosignAndGetKey(
     version: number;
     signedMessage: string;
   }
-): Promise<ArrayBuffer> {
+): Promise<CosignResult> {
   const res = await fetch(
     `${config.apiBaseUrl}/api/videos/${videoId}/cosign`,
     {
@@ -194,5 +200,19 @@ export async function cosignAndGetKey(
     const text = await res.text().catch(() => "");
     throw new Error(`Cosign ${res.status}: ${text}`);
   }
-  return res.arrayBuffer();
+
+  const keyBuffer = await res.arrayBuffer();
+
+  // Extract merkle proof from response header if available
+  let merkleProof: import("./merkle-verify").MerkleProof | null = null;
+  const proofHeader = res.headers.get("X-Merkle-Proof");
+  if (proofHeader) {
+    try {
+      merkleProof = JSON.parse(proofHeader);
+    } catch {
+      // Non-fatal: proof parsing failed
+    }
+  }
+
+  return { keyBuffer, merkleProof };
 }
