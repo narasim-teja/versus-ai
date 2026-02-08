@@ -13,7 +13,6 @@ import {
   Film,
   Users,
   Loader2,
-  Briefcase,
   RefreshCw,
 } from "lucide-react";
 import { useCallback, useState } from "react";
@@ -41,7 +40,7 @@ import {
   formatTimeAgo,
   truncateAddress,
 } from "@/lib/format";
-import { forceCycle, fetchAgent } from "@/lib/api";
+import { forceCycle } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 const strategyStyles = {
@@ -52,7 +51,7 @@ const strategyStyles = {
 export default function AgentDetailPage() {
   const params = useParams<{ agentId: string }>();
   const router = useRouter();
-  const { agent, videos, earnings, isLoading, error, refetch } =
+  const { agent, liveState, videos, earnings, isLoading, error, refetch } =
     useAgentDetail(params.agentId);
   const [forcing, setForcing] = useState(false);
 
@@ -68,8 +67,7 @@ export default function AgentDetailPage() {
     }
   }, [params.agentId, refetch]);
 
-  const state = agent?.latestDecision?.stateSnapshot;
-  const loan = state?.loan;
+  const loan = liveState?.loan;
 
   return (
     <div className="min-h-screen bg-background">
@@ -129,13 +127,13 @@ export default function AgentDetailPage() {
                     <div
                       className={cn(
                         "h-2 w-2 rounded-full",
-                        agent.status.isRunning
+                        (liveState?.isRunning ?? agent.status.isRunning)
                           ? "bg-emerald-500"
                           : "bg-red-500"
                       )}
                     />
                     <span className="text-xs text-muted-foreground">
-                      {agent.status.isRunning ? "Running" : "Stopped"}
+                      {(liveState?.isRunning ?? agent.status.isRunning) ? "Running" : "Stopped"}
                     </span>
                   </div>
                 </div>
@@ -170,7 +168,7 @@ export default function AgentDetailPage() {
                     label="Treasury"
                     value={
                       <span className="text-base font-semibold">
-                        {state ? formatUsdc(state.usdcBalance) : "--"}
+                        {liveState ? formatUsdc(liveState.usdcBalance) : "--"}
                       </span>
                     }
                     icon={<Wallet className="h-3.5 w-3.5" />}
@@ -178,17 +176,26 @@ export default function AgentDetailPage() {
                   <Separator />
                   <MetricRow
                     label="Token Earnings"
-                    value={state ? formatUsdc(state.ownTokenRevenue) : "--"}
+                    value={liveState ? formatUsdc(liveState.ownTokenRevenue) : "--"}
                     icon={<DollarSign className="h-3.5 w-3.5" />}
                   />
                   <MetricRow
-                    label="Streaming Earnings"
+                    label="On-Chain Earnings"
+                    value={
+                      earnings
+                        ? formatUsdc(earnings.onChainEarnings)
+                        : "--"
+                    }
+                    icon={<Film className="h-3.5 w-3.5" />}
+                  />
+                  <MetricRow
+                    label="Streaming Revenue"
                     value={
                       earnings
                         ? formatUsdc(earnings.totalStreamingEarnings)
                         : "--"
                     }
-                    icon={<Film className="h-3.5 w-3.5" />}
+                    icon={<DollarSign className="h-3.5 w-3.5" />}
                   />
                   <Separator />
                   <MetricRow
@@ -219,35 +226,30 @@ export default function AgentDetailPage() {
                   <MetricRow
                     label="Token Price"
                     value={
-                      state ? formatTokenPrice(state.ownTokenPrice) : "--"
+                      liveState ? formatTokenPrice(liveState.ownTokenPrice) : "--"
                     }
                     icon={<Coins className="h-3.5 w-3.5" />}
                   />
                   <MetricRow
                     label="Token Supply"
                     value={
-                      state ? formatTokenSupply(state.ownTokenSupply) : "--"
+                      liveState ? formatTokenSupply(liveState.ownTokenSupply) : "--"
                     }
                     icon={<TrendingUp className="h-3.5 w-3.5" />}
                   />
                   <Separator />
                   <MetricRow
-                    label="Holdings"
-                    value={`${state?.holdings.length ?? 0} tokens`}
-                    icon={<Briefcase className="h-3.5 w-3.5" />}
-                  />
-                  <MetricRow
                     label="Cycle"
-                    value={`#${agent.status.currentCycle}`}
+                    value={`#${liveState?.currentCycle ?? agent.status.currentCycle}`}
                     icon={<Hash className="h-3.5 w-3.5" />}
                   />
                   <MetricRow
                     label="Last Decision"
                     value={
-                      agent.status.lastDecisionTime
+                      (liveState?.lastDecisionTime ?? agent.status.lastDecisionTime)
                         ? formatTimeAgo(
                             new Date(
-                              agent.status.lastDecisionTime
+                              liveState?.lastDecisionTime ?? agent.status.lastDecisionTime!
                             ).getTime()
                           )
                         : "Never"

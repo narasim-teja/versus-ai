@@ -288,11 +288,34 @@ export interface SessionCloseResult {
 }
 
 // ============================================
+// Agent Live State (on-chain)
+// ============================================
+
+export interface AgentLiveState {
+  agentId: string;
+  usdcBalance: string;
+  ownTokenPrice: string;
+  ownTokenSupply: string;
+  ownTokenRevenue: string;
+  loan: {
+    active: boolean;
+    collateralAmount: string;
+    borrowedAmount: string;
+    healthFactor: number;
+    currentLTV: number;
+  } | null;
+  currentCycle: number;
+  lastDecisionTime: string | null;
+  isRunning: boolean;
+}
+
+// ============================================
 // Agent Earnings Types
 // ============================================
 
 export interface AgentEarnings {
   agentId: string;
+  onChainEarnings: string;
   totalStreamingEarnings: string;
   totalSessions: number;
   closedSessions: number;

@@ -23,6 +23,8 @@ import { db } from "../../db/client";
 import { videos, yellowSessions } from "../../db/schema";
 import { eq, desc, inArray } from "drizzle-orm";
 import { logger } from "../../utils/logger";
+import { getBondingCurve, getUSDC, getLendingPool, getERC20 } from "../../integrations/chain/contracts";
+import type { Address } from "viem";
 
 const agents = new Hono();
 
@@ -116,6 +118,77 @@ agents.get("/:id", async (c) => {
       ? serializeDecisionLog(latestDecision)
       : null,
   });
+});
+
+/**
+ * GET /api/agents/:id/state
+ *
+ * Live on-chain state queried directly from ARC testnet RPC.
+ * No cache — always fresh data for dashboard display.
+ */
+agents.get("/:id/state", async (c) => {
+  const agentId = c.req.param("id");
+  const config = getAgentConfig(agentId);
+
+  if (!config) {
+    return c.json({ error: "Agent not found" }, 404);
+  }
+
+  const evmAddress = config.evmAddress as Address;
+  const bondingCurve = getBondingCurve(config.bondingCurveAddress as Address);
+  const token = getERC20(config.tokenAddress as Address);
+  const usdc = getUSDC();
+
+  try {
+    // Query all on-chain data in parallel
+    const [price, supply, earned, usdcBalance] = await Promise.all([
+      bondingCurve.read.getPrice(),
+      token.read.totalSupply(),
+      bondingCurve.read.earned([evmAddress]),
+      usdc.read.balanceOf([evmAddress]),
+    ]);
+
+    // Loan info (separate try-catch so it doesn't block the rest)
+    let loan = null;
+    try {
+      const lendingPool = getLendingPool();
+      const loanData = await lendingPool.read.loans([evmAddress]);
+      const borrowedAmount = loanData[2] as bigint;
+      if (borrowedAmount > 0n) {
+        const healthFactor = await lendingPool.read.getHealthFactor([evmAddress]);
+        const collateralValue = await lendingPool.read.getCollateralValue([evmAddress]);
+        const currentLTV = collateralValue > 0n
+          ? Number((borrowedAmount * 100n) / (collateralValue as bigint))
+          : 0;
+        loan = {
+          active: true,
+          collateralAmount: (loanData[1] as bigint).toString(),
+          borrowedAmount: borrowedAmount.toString(),
+          healthFactor: Number(healthFactor as bigint) / 1e18,
+          currentLTV,
+        };
+      }
+    } catch {
+      // No loan or lending pool error — fine
+    }
+
+    const status = getAgentStatus(agentId);
+
+    return c.json({
+      agentId,
+      usdcBalance: (usdcBalance as bigint).toString(),
+      ownTokenPrice: (price as bigint).toString(),
+      ownTokenSupply: (supply as bigint).toString(),
+      ownTokenRevenue: (earned as bigint).toString(),
+      loan,
+      currentCycle: status?.currentCycle ?? 0,
+      lastDecisionTime: status?.lastDecisionTime ?? null,
+      isRunning: status?.isRunning ?? false,
+    });
+  } catch (err) {
+    logger.error({ agentId, err: (err as Error).message }, "Failed to query on-chain state");
+    return c.json({ error: "Failed to query on-chain state" }, 500);
+  }
 });
 
 /**
@@ -244,7 +317,7 @@ agents.get("/:id/videos", async (c) => {
 /**
  * GET /api/agents/:id/earnings
  *
- * Aggregate streaming earnings from Yellow sessions for this agent's videos
+ * Query on-chain earnings from ARC testnet (bonding curve) + DB session stats
  */
 agents.get("/:id/earnings", async (c) => {
   const agentId = c.req.param("id");
@@ -254,7 +327,17 @@ agents.get("/:id/earnings", async (c) => {
     return c.json({ error: "Agent not found" }, 404);
   }
 
-  // Get all video IDs for this agent
+  // Query on-chain earnings from bonding curve on ARC testnet
+  let onChainEarnings = "0";
+  try {
+    const bondingCurve = getBondingCurve(config.bondingCurveAddress as Address);
+    const earned = await bondingCurve.read.earned([config.evmAddress as Address]);
+    onChainEarnings = (earned as bigint).toString();
+  } catch (err) {
+    logger.warn({ agentId, err: (err as Error).message }, "Failed to query on-chain earnings");
+  }
+
+  // Get session stats from DB
   const agentVideos = await db
     .select({ id: videos.id })
     .from(videos)
@@ -262,53 +345,41 @@ agents.get("/:id/earnings", async (c) => {
 
   const videoIds = agentVideos.map((v) => v.id);
 
-  if (videoIds.length === 0) {
-    return c.json({
-      agentId,
-      totalStreamingEarnings: "0",
-      totalSessions: 0,
-      closedSessions: 0,
-      totalSegmentsDelivered: 0,
-    });
-  }
+  let totalStreamingEarnings = BigInt(0);
+  let totalSessions = 0;
+  let closedSessions = 0;
+  let totalSegmentsDelivered = 0;
 
-  // Aggregate earnings from Yellow sessions
-  const sessions = await db
-    .select({
-      creatorBalance: yellowSessions.creatorBalance,
-      segmentsDelivered: yellowSessions.segmentsDelivered,
-      status: yellowSessions.status,
-    })
-    .from(yellowSessions)
-    .where(inArray(yellowSessions.videoId, videoIds));
+  if (videoIds.length > 0) {
+    const sessions = await db
+      .select({
+        creatorBalance: yellowSessions.creatorBalance,
+        segmentsDelivered: yellowSessions.segmentsDelivered,
+        status: yellowSessions.status,
+      })
+      .from(yellowSessions)
+      .where(inArray(yellowSessions.videoId, videoIds));
 
-  let totalEarnings = BigInt(0);
-  let totalSegments = 0;
-  let closedCount = 0;
+    totalSessions = sessions.length;
 
-  for (const s of sessions) {
-    if (s.status === "closed" || s.status === "settled") {
-      // creatorBalance may be a decimal string or integer string
-      const raw = s.creatorBalance || "0";
-      try {
-        // If it's an integer string, use BigInt directly
-        totalEarnings += BigInt(raw.split(".")[0]);
-      } catch {
-        // Fallback: parse as float and convert to integer (6-decimal USDC)
-        const parsed = Math.floor(parseFloat(raw) * 1e6);
-        if (!isNaN(parsed)) totalEarnings += BigInt(parsed);
+    for (const s of sessions) {
+      if (s.status === "closed" || s.status === "settled") {
+        const raw = s.creatorBalance || "0";
+        const parsed = Math.round(parseFloat(raw) * 1e6);
+        if (!isNaN(parsed)) totalStreamingEarnings += BigInt(parsed);
+        closedSessions++;
       }
-      closedCount++;
+      totalSegmentsDelivered += s.segmentsDelivered || 0;
     }
-    totalSegments += s.segmentsDelivered || 0;
   }
 
   return c.json({
     agentId,
-    totalStreamingEarnings: totalEarnings.toString(),
-    totalSessions: sessions.length,
-    closedSessions: closedCount,
-    totalSegmentsDelivered: totalSegments,
+    onChainEarnings,
+    totalStreamingEarnings: totalStreamingEarnings.toString(),
+    totalSessions,
+    closedSessions,
+    totalSegmentsDelivered,
   });
 });
 

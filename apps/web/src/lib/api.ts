@@ -3,6 +3,7 @@ import type {
   Agent,
   AgentDetail,
   AgentEarnings,
+  AgentLiveState,
   DecisionLog,
   HealthResponse,
   TokenPrice,
@@ -177,6 +178,12 @@ export async function fetchAgentVideos(agentId: string): Promise<Video[]> {
     `/api/agents/${agentId}/videos`
   );
   return data.videos;
+}
+
+export async function fetchAgentLiveState(
+  agentId: string
+): Promise<AgentLiveState> {
+  return fetchJson<AgentLiveState>(`/api/agents/${agentId}/state`);
 }
 
 export async function fetchAgentEarnings(

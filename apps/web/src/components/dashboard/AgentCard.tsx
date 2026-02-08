@@ -10,7 +10,6 @@ import {
   Hash,
   Clock,
   DollarSign,
-  Briefcase,
 } from "lucide-react";
 import {
   Card,
@@ -22,7 +21,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Progress } from "@/components/ui/Progress";
 import { Separator } from "@/components/ui/Separator";
 import { MetricRow } from "./MetricRow";
-import { fetchAgent } from "@/lib/api";
+import { fetchAgentLiveState } from "@/lib/api";
 import {
   formatUsdc,
   formatTokenPrice,
@@ -31,7 +30,7 @@ import {
   formatLTV,
   formatTimeAgo,
 } from "@/lib/format";
-import type { Agent, AgentDetail } from "@/lib/types";
+import type { Agent, AgentLiveState } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 interface AgentCardProps {
@@ -44,14 +43,14 @@ const strategyStyles = {
 } as const;
 
 export function AgentCard({ agent }: AgentCardProps) {
-  const [detail, setDetail] = useState<AgentDetail | null>(null);
+  const [state, setState] = useState<AgentLiveState | null>(null);
 
   useEffect(() => {
     let mounted = true;
     const load = async () => {
       try {
-        const data = await fetchAgent(agent.id);
-        if (mounted) setDetail(data);
+        const data = await fetchAgentLiveState(agent.id);
+        if (mounted) setState(data);
       } catch {
         // Silently fail - card still shows basic info
       }
@@ -64,7 +63,6 @@ export function AgentCard({ agent }: AgentCardProps) {
     };
   }, [agent.id]);
 
-  const state = detail?.latestDecision?.stateSnapshot;
   const loan = state?.loan;
 
   return (
@@ -85,11 +83,11 @@ export function AgentCard({ agent }: AgentCardProps) {
               <div
                 className={cn(
                   "h-2 w-2 rounded-full",
-                  agent.status.isRunning ? "bg-emerald-500" : "bg-red-500"
+                  (state?.isRunning ?? agent.status.isRunning) ? "bg-emerald-500" : "bg-red-500"
                 )}
               />
               <span className="text-xs text-muted-foreground">
-                {agent.status.isRunning ? "Running" : "Stopped"}
+                {(state?.isRunning ?? agent.status.isRunning) ? "Running" : "Stopped"}
               </span>
             </div>
           </div>
@@ -159,22 +157,17 @@ export function AgentCard({ agent }: AgentCardProps) {
 
           <Separator />
 
-          {/* Holdings & Cycle */}
-          <MetricRow
-            label="Holdings"
-            value={`${state?.holdings.length ?? 0} tokens`}
-            icon={<Briefcase className="h-3.5 w-3.5" />}
-          />
+          {/* Cycle */}
           <MetricRow
             label="Cycle"
-            value={`#${agent.status.currentCycle}`}
+            value={`#${state?.currentCycle ?? agent.status.currentCycle}`}
             icon={<Hash className="h-3.5 w-3.5" />}
           />
           <MetricRow
             label="Last Decision"
             value={
-              agent.status.lastDecisionTime
-                ? formatTimeAgo(new Date(agent.status.lastDecisionTime).getTime())
+              (state?.lastDecisionTime ?? agent.status.lastDecisionTime)
+                ? formatTimeAgo(new Date(state?.lastDecisionTime ?? agent.status.lastDecisionTime!).getTime())
                 : "Never"
             }
             icon={<Clock className="h-3.5 w-3.5" />}
