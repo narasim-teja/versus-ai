@@ -21,6 +21,7 @@ import {
   processSegmentPayment,
   cosignAndSubmitPayment,
   closeStreamingSession,
+  finalizeCustodyChannel,
   getSession,
 } from "../../integrations/yellow";
 
@@ -150,6 +151,13 @@ streamingRoutes.post("/:videoId/session", async (c) => {
         asset: env.YELLOW_ASSET,
         channelId: session.channelId || null,
         custodyDepositTxHash: session.custodyDepositTxHash || null,
+        // Pending custody channel data for viewer co-signing
+        custodyChannelData: session.pendingChannelData
+          ? {
+              packedStateHex: session.pendingChannelData.packedStateHex,
+              channelId: session.pendingChannelData.channelId,
+            }
+          : null,
       });
     } catch (err) {
       logger.error({ err, videoId, viewerAddress }, "Failed to create Yellow session");
@@ -178,6 +186,82 @@ streamingRoutes.post("/:videoId/session", async (c) => {
     videoId,
     expiresAt,
   });
+});
+
+/**
+ * POST /api/videos/:videoId/session/:sessionId/custody-sign - Finalize custody channel
+ *
+ * The viewer's ephemeral key signs the packed initial state and sends the
+ * signature here. The server then opens the on-chain Custody channel using
+ * both signatures (server + viewer).
+ *
+ * Body: { signature: "0x..." }
+ */
+streamingRoutes.post("/:videoId/session/:sessionId/custody-sign", async (c) => {
+  const videoId = c.req.param("videoId");
+  const sessionId = c.req.param("sessionId");
+
+  const session = getSession(sessionId);
+  if (!session) {
+    return c.json({ error: "Session not found" }, 404);
+  }
+
+  if (session.videoId !== videoId) {
+    return c.json({ error: "Session does not match video" }, 403);
+  }
+
+  let body: { signature: string };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid request body" }, 400);
+  }
+
+  if (!body.signature) {
+    return c.json({ error: "Missing required field: signature" }, 400);
+  }
+
+  try {
+    const result = await finalizeCustodyChannel(
+      sessionId,
+      body.signature as `0x${string}`,
+    );
+
+    if (!result) {
+      return c.json({
+        success: false,
+        message: "Custody channel finalization returned null (check server logs)",
+      });
+    }
+
+    // Update database with channel info
+    await db
+      .update(yellowSessions)
+      .set({
+        channelId: result.channelId,
+        custodyDepositTxHash: result.txHash,
+      })
+      .where(eq(yellowSessions.id, sessionId));
+
+    logger.info(
+      { sessionId, channelId: result.channelId, txHash: result.txHash },
+      "Custody channel finalized via viewer co-signature",
+    );
+
+    return c.json({
+      success: true,
+      channelId: result.channelId,
+      custodyDepositTxHash: result.txHash,
+      closeStateHash: result.closeStateHash,
+      explorerLink: `https://sepolia.basescan.org/tx/${result.txHash}`,
+    });
+  } catch (err) {
+    logger.error({ err, sessionId }, "Failed to finalize custody channel");
+    return c.json(
+      { error: "Failed to finalize custody channel", details: String(err) },
+      500,
+    );
+  }
 });
 
 /**
@@ -411,8 +495,17 @@ streamingRoutes.post("/:videoId/session/:sessionId/close", async (c) => {
     return c.json({ error: "Session does not match video" }, 403);
   }
 
+  // Parse optional close signature from body
+  let closeSignature: string | undefined;
   try {
-    const result = await closeStreamingSession(sessionId);
+    const body = await c.req.json();
+    closeSignature = body.closeSignature;
+  } catch {
+    // No body is fine — close will skip channel close without signature
+  }
+
+  try {
+    const result = await closeStreamingSession(sessionId, closeSignature);
 
     // Update database with settlement tx hashes
     await db

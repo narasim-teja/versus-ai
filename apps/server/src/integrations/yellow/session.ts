@@ -22,8 +22,11 @@ import { getYellowClient, isYellowConfigured } from "./client";
 import { triggerSettlement, type SettlementResult } from "./settlement";
 import {
   isNitroliteConfigured,
+  prepareCustodyChannel,
   openCustodyChannel,
   closeCustodyChannel,
+  computeCloseStateHash,
+  type PreparedChannel,
 } from "../nitrolite";
 import { env } from "../../utils/env";
 import { logger } from "../../utils/logger";
@@ -55,6 +58,10 @@ export interface StreamingSession {
   custodyDepositTxHash: string | null;
   channelCloseTxHash: string | null;
   custodyWithdrawTxHash: string | null;
+  // Pending channel data (awaiting viewer's co-signature)
+  pendingChannelData: PreparedChannel | null;
+  // Pre-computed close state hash for viewer to sign at close time
+  closeStateHash: string | null;
 }
 
 // ─── In-Memory Session Store ─────────────────────────────────────────
@@ -137,28 +144,25 @@ export async function createStreamingSession(
     );
   }
 
-  // Open on-chain Custody channel (graceful degradation)
-  let channelId: string | null = null;
-  let custodyDepositTxHash: string | null = null;
+  // Prepare on-chain Custody channel state for viewer co-signing (graceful degradation)
+  let pendingChannelData: PreparedChannel | null = null;
 
   if (isNitroliteConfigured()) {
     try {
-      const channelResult = await openCustodyChannel(
+      pendingChannelData = prepareCustodyChannel(
         viewerAddress as `0x${string}`,
         depositAmount,
       );
-      if (channelResult) {
-        channelId = channelResult.channelId;
-        custodyDepositTxHash = channelResult.txHash;
+      if (pendingChannelData) {
         logger.info(
-          { channelId, custodyDepositTxHash, appSessionId },
-          "On-chain Custody channel opened for session",
+          { channelId: pendingChannelData.channelId, appSessionId },
+          "Custody channel state prepared, awaiting viewer co-signature",
         );
       }
     } catch (err) {
       logger.warn(
         { err, appSessionId },
-        "Nitrolite Custody channel open failed (continuing with ClearNode-only)",
+        "Nitrolite Custody channel prepare failed (continuing with ClearNode-only)",
       );
     }
   }
@@ -180,10 +184,12 @@ export async function createStreamingSession(
     paidSegments: new Set<number>(),
     creatorTokenAddress,
     creatorBondingCurveAddress,
-    channelId,
-    custodyDepositTxHash,
+    channelId: null,
+    custodyDepositTxHash: null,
     channelCloseTxHash: null,
     custodyWithdrawTxHash: null,
+    pendingChannelData,
+    closeStateHash: null,
   };
 
   activeSessions.set(appSessionId, session);
@@ -196,7 +202,7 @@ export async function createStreamingSession(
       creator: creatorAddress,
       deposit: depositAmount,
       serverAddress: client.serverAddress,
-      channelId,
+      hasPendingCustody: !!pendingChannelData,
     },
     "Yellow streaming session created",
   );
@@ -412,6 +418,7 @@ export async function processSegmentPayment(
  */
 export async function closeStreamingSession(
   appSessionId: string,
+  viewerCloseSignature?: string,
 ): Promise<{ settled: boolean; totalPaid: string; settlement: SettlementResult }> {
   const session = activeSessions.get(appSessionId);
   if (!session) {
@@ -460,6 +467,7 @@ export async function closeStreamingSession(
         session.viewerAddress as `0x${string}`,
         session.viewerBalance,
         session.creatorBalance,
+        viewerCloseSignature as `0x${string}` | undefined,
       );
       session.channelCloseTxHash = closeResult.closeTxHash;
       session.custodyWithdrawTxHash = closeResult.withdrawTxHash;
@@ -512,6 +520,69 @@ export async function closeStreamingSession(
 
   activeSessions.delete(appSessionId);
   return { settled: true, totalPaid, settlement };
+}
+
+/**
+ * Finalize the on-chain Custody channel after the viewer co-signs.
+ *
+ * Called when the browser POSTs the ephemeral key's signature of the
+ * packed initial state. Opens the channel on-chain with both signatures.
+ */
+export async function finalizeCustodyChannel(
+  appSessionId: string,
+  viewerSignature: Hex,
+): Promise<{ channelId: string; txHash: string; closeStateHash: string } | null> {
+  const session = activeSessions.get(appSessionId);
+  if (!session) {
+    throw new Error(`Streaming session not found: ${appSessionId}`);
+  }
+
+  if (!session.pendingChannelData) {
+    logger.warn({ appSessionId }, "No pending custody channel data to finalize");
+    return null;
+  }
+
+  try {
+    const result = await openCustodyChannel(
+      session.pendingChannelData,
+      viewerSignature,
+    );
+
+    if (!result) {
+      logger.warn({ appSessionId }, "openCustodyChannel returned null");
+      return null;
+    }
+
+    // Update session with on-chain channel info
+    session.channelId = result.channelId;
+    session.custodyDepositTxHash = result.txHash;
+    session.pendingChannelData = null; // No longer pending
+
+    // Pre-compute the close state hash so browser can sign it at close time
+    const closeStateHash = computeCloseStateHash(
+      result.channelId,
+      session.serverAddress as `0x${string}`,
+      session.viewerAddress as `0x${string}`,
+    );
+    session.closeStateHash = closeStateHash;
+
+    logger.info(
+      {
+        appSessionId,
+        channelId: result.channelId,
+        txHash: result.txHash,
+      },
+      "Custody channel finalized with viewer co-signature",
+    );
+
+    return { channelId: result.channelId, txHash: result.txHash, closeStateHash };
+  } catch (err) {
+    logger.error(
+      { err, appSessionId },
+      "Failed to finalize custody channel",
+    );
+    return null;
+  }
 }
 
 // ─── Lookup Helpers ──────────────────────────────────────────────────

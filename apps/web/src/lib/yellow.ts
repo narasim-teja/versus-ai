@@ -255,6 +255,23 @@ export async function requestFaucetTokens(address: string): Promise<void> {
 }
 
 /**
+ * Sign a packed channel state hash with the ephemeral key.
+ * Used to co-sign the initial Nitrolite Custody channel state
+ * so the server can open the on-chain channel with both signatures.
+ */
+export async function signChannelState(
+  packedStateHex: Hex,
+  ephemeralPrivateKey: Hex,
+): Promise<Hex> {
+  const account = privateKeyToAccount(ephemeralPrivateKey);
+  const signature = await account.signMessage({
+    message: { raw: packedStateHex },
+  });
+  console.log("[Yellow] Signed custody channel state with ephemeral key");
+  return signature;
+}
+
+/**
  * Disconnect and cleanup a browser ClearNode client.
  */
 export function disconnectClearNode(client: YellowBrowserClient): void {

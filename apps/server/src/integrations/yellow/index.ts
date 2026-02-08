@@ -10,6 +10,7 @@ export {
   processSegmentPayment,
   cosignAndSubmitPayment,
   closeStreamingSession,
+  finalizeCustodyChannel,
   getSession,
   getSessionByViewer,
   getActiveSessions,

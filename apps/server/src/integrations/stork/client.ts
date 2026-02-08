@@ -128,13 +128,13 @@ export async function getHistoricalPrices(
     const data = (await response.json()) as StorkHistoryResponse;
 
     if (data.s !== "ok") {
-      logger.warn({ symbol, data }, "Stork history response not ok");
+      //logger.warn({ symbol, data }, "Stork history response not ok");
       return null;
     }
 
     return data;
   } catch (error) {
-    logger.error({ symbol, from, to, error }, "Failed to fetch Stork history");
+    //logger.error({ symbol, from, to, error }, "Failed to fetch Stork history");
     return null;
   }
 }

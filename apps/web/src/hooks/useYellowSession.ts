@@ -5,6 +5,7 @@ import {
   connectToClearNode,
   disconnectClearNode,
   requestFaucetTokens,
+  signChannelState,
   type YellowBrowserClient,
 } from "@/lib/yellow";
 import { cosignAndGetKey } from "@/lib/api";
@@ -35,6 +36,7 @@ export interface YellowSessionState {
   ephemeralAddress: string | null;
   pricePerSegment: string;
   totalDeposited: string;
+  closeStateHash: string | null;
 }
 
 const initialState: YellowSessionState = {
@@ -48,6 +50,7 @@ const initialState: YellowSessionState = {
   ephemeralAddress: null,
   pricePerSegment: config.yellowPricePerSegment,
   totalDeposited: "0",
+  closeStateHash: null,
 };
 
 // ─── Hook ────────────────────────────────────────────────────────────
@@ -113,6 +116,7 @@ export function useYellowSession() {
           ephemeralAddress: client.ephemeralAddress,
           pricePerSegment: data.pricePerSegment || config.yellowPricePerSegment,
           totalDeposited: data.totalDeposited || depositAmount,
+          closeStateHash: null,
         };
 
         setState(newState);
@@ -122,6 +126,43 @@ export function useYellowSession() {
         console.log(
           `[Yellow] Session active: ${data.appSessionId}, ephemeral: ${client.ephemeralAddress}`
         );
+
+        // Co-sign the Custody channel state if server prepared one
+        if (data.custodyChannelData?.packedStateHex) {
+          try {
+            console.log("[Yellow] Signing custody channel state...");
+            const signature = await signChannelState(
+              data.custodyChannelData.packedStateHex,
+              client.ephemeralPrivateKey,
+            );
+
+            const custodyRes = await fetch(
+              `${config.apiBaseUrl}/api/videos/${videoId}/session/${data.appSessionId}/custody-sign`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ signature }),
+              }
+            );
+
+            if (custodyRes.ok) {
+              const custodyResult = await custodyRes.json();
+              if (custodyResult.closeStateHash) {
+                const updated = { ...stateRef.current, closeStateHash: custodyResult.closeStateHash };
+                setState(updated);
+                stateRef.current = updated;
+              }
+              console.log(
+                `[Yellow] Custody channel opened! channelId: ${custodyResult.channelId}, tx: ${custodyResult.custodyDepositTxHash}`
+              );
+            } else {
+              console.warn("[Yellow] Custody sign endpoint failed:", custodyRes.status);
+            }
+          } catch (custodyErr) {
+            // Non-fatal — streaming still works via ClearNode
+            console.warn("[Yellow] Custody channel signing failed (non-fatal):", custodyErr);
+          }
+        }
       } catch (err) {
         setError(
           err instanceof Error ? err.message : "Failed to start Yellow session"
@@ -243,9 +284,27 @@ export function useYellowSession() {
     // Close via backend API and capture settlement result
     if (current.appSessionId) {
       try {
+        // Sign the close state if we have a custody channel
+        let closeSignature: string | undefined;
+        if (current.closeStateHash && clientRef.current) {
+          try {
+            closeSignature = await signChannelState(
+              current.closeStateHash as `0x${string}`,
+              clientRef.current.ephemeralPrivateKey,
+            );
+            console.log("[Yellow] Signed custody close state");
+          } catch (signErr) {
+            console.warn("[Yellow] Failed to sign close state (non-fatal):", signErr);
+          }
+        }
+
         const res = await fetch(
           `${config.apiBaseUrl}/api/videos/${videoId}/session/${current.appSessionId}/close`,
-          { method: "POST" }
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ closeSignature }),
+          }
         );
         if (res.ok) {
           const closeResult: SessionCloseResult = await res.json();

@@ -170,13 +170,15 @@ export async function initiateBridgeOnChain(
     const baseSepoliaUsdc = (env.BASE_SEPOLIA_USDC_ADDRESS ||
       "0x036CbD53842c5426634e7929541eC2318f3dCF7e") as `0x${string}`;
 
-    // Approve BridgeEscrow to spend USDC
-    await walletClient.writeContract({
+    // Approve BridgeEscrow to spend USDC (wait for confirmation)
+    const basePublicClient = getBasePublicClient();
+    const approveHash = await walletClient.writeContract({
       address: baseSepoliaUsdc,
       abi: erc20Abi,
       functionName: "approve",
       args: [env.BRIDGE_ESCROW_ADDRESS as `0x${string}`, amount],
     });
+    await basePublicClient.waitForTransactionReceipt({ hash: approveHash });
 
     // Initiate bridge
     const txHash = await walletClient.writeContract({
@@ -226,14 +228,16 @@ export async function distributeRevenueOnChain(
 
     const usdcAddress = env.USDC_ADDRESS as `0x${string}`;
     const distributorAddress = env.REVENUE_DISTRIBUTOR_ADDRESS as `0x${string}`;
+    const arcPublicClient = getPublicClient();
 
-    // Approve RevenueDistributor to spend USDC
-    await walletClient.writeContract({
+    // Approve RevenueDistributor to spend USDC (wait for confirmation)
+    const approveHash = await walletClient.writeContract({
       address: usdcAddress,
       abi: erc20Abi,
       functionName: "approve",
       args: [distributorAddress, amount],
     });
+    await arcPublicClient.waitForTransactionReceipt({ hash: approveHash });
 
     // Distribute revenue (70% creator, 20% holders, 10% protocol)
     const txHash = await walletClient.writeContract({
