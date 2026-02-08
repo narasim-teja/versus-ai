@@ -58,6 +58,13 @@ export function useVideoSession(): UseVideoSessionReturn {
 
   const yellow = useYellowSession();
 
+  // Stable ref for yellow.closeYellowSession so cleanup effect doesn't
+  // re-run every render (yellow object is a new reference each render).
+  const closeYellowRef = useRef(yellow.closeYellowSession);
+  useEffect(() => {
+    closeYellowRef.current = yellow.closeYellowSession;
+  }, [yellow.closeYellowSession]);
+
   // Keep refs in sync for cleanup
   useEffect(() => {
     sessionRef.current = session;
@@ -78,15 +85,23 @@ export function useVideoSession(): UseVideoSessionReturn {
       case "session_active":
         setSessionState("active");
         if (yellow.state.appSessionId) {
-          setSession({
-            type: "yellow",
-            appSessionId: yellow.state.appSessionId,
-            videoId: yellow.state.videoId!,
-            serverAddress: yellow.state.serverAddress || "",
-            pricePerSegment: yellow.state.pricePerSegment,
-            viewerBalance: yellow.state.viewerBalance,
-            totalDeposited: yellow.state.totalDeposited,
-            asset: config.yellowAsset,
+          // Only create session object once — don't recreate on balance updates
+          // or it triggers player re-initialization loop
+          const appSessionId = yellow.state.appSessionId!;
+          setSession((prev: ViewingSession | null) => {
+            if (prev && prev.type === "yellow" && prev.appSessionId === appSessionId) {
+              return prev; // same reference, no re-render
+            }
+            return {
+              type: "yellow",
+              appSessionId,
+              videoId: yellow.state.videoId!,
+              serverAddress: yellow.state.serverAddress || "",
+              pricePerSegment: yellow.state.pricePerSegment,
+              viewerBalance: yellow.state.viewerBalance,
+              totalDeposited: yellow.state.totalDeposited,
+              asset: config.yellowAsset,
+            };
           });
         }
         break;
@@ -203,7 +218,7 @@ export function useVideoSession(): UseVideoSessionReturn {
     if (!s) return;
 
     if (isYellowCosignRef.current && s.type === "yellow") {
-      await yellow.closeYellowSession(s.videoId);
+      await closeYellowRef.current(s.videoId);
       return;
     }
 
@@ -219,26 +234,26 @@ export function useVideoSession(): UseVideoSessionReturn {
     setSession(null);
     setSessionStatus(null);
     setSessionState("closed");
-  }, [stopPolling, yellow]);
+  }, [stopPolling]);
 
   const markInsufficientBalance = useCallback(() => {
     setSessionState("insufficient_balance");
   }, []);
 
-  // Cleanup on unmount
+  // Cleanup on unmount only (not on every re-render)
   useEffect(() => {
     return () => {
       stopPolling();
       const s = sessionRef.current;
       if (s && s.type === "yellow") {
         if (isYellowCosignRef.current) {
-          yellow.closeYellowSession(s.videoId).catch(() => {});
+          closeYellowRef.current(s.videoId).catch(() => {});
         } else {
           closeSession(s.videoId, s.appSessionId).catch(() => {});
         }
       }
     };
-  }, [stopPolling, yellow]);
+  }, [stopPolling]);
 
   return {
     session,

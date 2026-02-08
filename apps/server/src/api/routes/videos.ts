@@ -63,6 +63,10 @@ videoRoutes.get("/:id", async (c) => {
       thumbnailUri: videos.thumbnailUri,
       createdAt: videos.createdAt,
       processedAt: videos.processedAt,
+      registryTxHash: videos.registryTxHash,
+      registryChainId: videos.registryChainId,
+      creatorWallet: videos.creatorWallet,
+      creatorTokenAddress: videos.creatorTokenAddress,
     })
     .from(videos)
     .where(eq(videos.id, videoId))
@@ -72,7 +76,15 @@ videoRoutes.get("/:id", async (c) => {
     return c.json({ error: "Video not found" }, 404);
   }
 
-  return c.json({ video: video[0] });
+  const v = video[0];
+  return c.json({
+    video: {
+      ...v,
+      registryExplorerLink: v.registryTxHash
+        ? `https://sepolia.basescan.org/tx/${v.registryTxHash}`
+        : null,
+    },
+  });
 });
 
 /**

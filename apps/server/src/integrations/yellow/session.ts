@@ -16,6 +16,7 @@ import type { Address, Hex } from "viem";
 import {
   createAppSessionMessage,
   createCloseAppSessionMessage,
+  RPCProtocolVersion,
 } from "@erc7824/nitrolite";
 import { getYellowClient, isYellowConfigured } from "./client";
 import { triggerSettlement, type SettlementResult } from "./settlement";
@@ -39,6 +40,8 @@ export interface StreamingSession {
   version: number;
   createdAt: number;
   lastPaymentAt: number;
+  // Track which segments have been paid for (deduplication)
+  paidSegments: Set<number>;
   // On-chain settlement fields (denormalized from agent)
   creatorTokenAddress: string;
   creatorBondingCurveAddress: string;
@@ -74,8 +77,8 @@ export async function createStreamingSession(
   try {
     // Create REAL app session on ClearNode
     const appDefinition = {
-      protocol: "NitroRPC/0.4",
-      participants: [viewerAddress, client.serverAddress],
+      protocol: RPCProtocolVersion.NitroRPC_0_4,
+      participants: [viewerAddress as `0x${string}`, client.serverAddress],
       weights: [50, 50],
       quorum: 100,
       challenge: 0,
@@ -85,12 +88,12 @@ export async function createStreamingSession(
 
     const allocations = [
       {
-        participant: viewerAddress,
+        participant: viewerAddress as `0x${string}`,
         asset: env.YELLOW_ASSET,
         amount: depositAmount,
       },
       {
-        participant: client.serverAddress,
+        participant: client.serverAddress as `0x${string}`,
         asset: env.YELLOW_ASSET,
         amount: "0",
       },
@@ -98,7 +101,7 @@ export async function createStreamingSession(
 
     const signedMessage = await createAppSessionMessage(
       client.sessionSigner,
-      [{ definition: appDefinition, allocations }],
+      { definition: appDefinition, allocations },
     );
 
     const response = await client.sendAndWait(signedMessage, 15000);
@@ -138,6 +141,7 @@ export async function createStreamingSession(
     version: 0,
     createdAt: Date.now(),
     lastPaymentAt: Date.now(),
+    paidSegments: new Set<number>(),
     creatorTokenAddress,
     creatorBondingCurveAddress,
   };
@@ -177,6 +181,15 @@ export async function cosignAndSubmitPayment(
   const session = activeSessions.get(appSessionId);
   if (!session) {
     throw new Error(`Streaming session not found: ${appSessionId}`);
+  }
+
+  // Deduplication: if this segment was already paid for, return current balance without charging
+  if (session.paidSegments.has(segmentIndex)) {
+    logger.debug(
+      { appSessionId, segmentIndex },
+      "Segment already paid for, skipping charge",
+    );
+    return { success: true, newViewerBalance: session.viewerBalance };
   }
 
   const price = parseFloat(session.pricePerSegment);
@@ -273,6 +286,7 @@ export async function cosignAndSubmitPayment(
   session.segmentsDelivered += 1;
   session.version = version;
   session.lastPaymentAt = Date.now();
+  session.paidSegments.add(segmentIndex);
 
   logger.debug(
     {
@@ -301,6 +315,15 @@ export async function processSegmentPayment(
     throw new Error(`Streaming session not found: ${appSessionId}`);
   }
 
+  // Deduplication: if this segment was already paid for, return current balance without charging
+  if (session.paidSegments.has(segmentIndex)) {
+    logger.debug(
+      { appSessionId, segmentIndex },
+      "Segment already paid for, skipping charge",
+    );
+    return { success: true, newViewerBalance: session.viewerBalance };
+  }
+
   const price = parseFloat(session.pricePerSegment);
   const currentViewerBalance = parseFloat(session.viewerBalance);
 
@@ -327,6 +350,7 @@ export async function processSegmentPayment(
   session.segmentsDelivered += 1;
   session.version += 1;
   session.lastPaymentAt = Date.now();
+  session.paidSegments.add(segmentIndex);
 
   logger.debug(
     {
@@ -361,23 +385,21 @@ export async function closeStreamingSession(
 
     const closeMsg = await createCloseAppSessionMessage(
       client.sessionSigner,
-      [
-        {
-          app_session_id: appSessionId as Hex,
-          allocations: [
-            {
-              participant: session.viewerAddress,
-              asset: env.YELLOW_ASSET,
-              amount: session.viewerBalance,
-            },
-            {
-              participant: session.serverAddress,
-              asset: env.YELLOW_ASSET,
-              amount: session.creatorBalance,
-            },
-          ],
-        },
-      ],
+      {
+        app_session_id: appSessionId as Hex,
+        allocations: [
+          {
+            participant: session.viewerAddress as `0x${string}`,
+            asset: env.YELLOW_ASSET,
+            amount: session.viewerBalance,
+          },
+          {
+            participant: session.serverAddress as `0x${string}`,
+            asset: env.YELLOW_ASSET,
+            amount: session.creatorBalance,
+          },
+        ],
+      },
     );
 
     await client.sendAndWait(closeMsg, 10000);

@@ -55,11 +55,9 @@ export function VideoPlayer({ video }: VideoPlayerProps) {
     const videoEl = videoRef.current;
     if (!videoEl || !video.contentUri || !session) return;
 
-    // Destroy previous instance
-    if (hlsRef.current) {
-      hlsRef.current.destroy();
-      hlsRef.current = null;
-    }
+    // Already initialized — don't destroy and re-create
+    // (balance updates change session/deps, but player must stay alive)
+    if (hlsRef.current) return;
 
     if (!Hls.isSupported()) {
       // Fallback for Safari native HLS — cannot add custom headers
@@ -192,6 +190,17 @@ export function VideoPlayer({ video }: VideoPlayerProps) {
       initializePlayer();
     }
   }, [sessionState, session, initializePlayer]);
+
+  // Destroy player when session ends (so "Watch Again" can re-init)
+  useEffect(() => {
+    if (sessionState === "closed" || sessionState === "idle" || sessionState === "error") {
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+        setPlayerReady(false);
+      }
+    }
+  }, [sessionState]);
 
   // Cleanup on unmount
   useEffect(() => {
