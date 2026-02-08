@@ -1,8 +1,10 @@
 # ---- Build Stage ----
-FROM oven/bun:1 AS builder
+FROM node:18 AS builder
 
-# Install pnpm (needed for workspace dependency resolution)
-RUN npm install -g pnpm
+# Install bun and pnpm
+RUN curl -fsSL https://bun.sh/install | bash && \
+    npm install -g pnpm
+ENV PATH="/root/.bun/bin:$PATH"
 
 WORKDIR /app
 
@@ -13,7 +15,7 @@ COPY package.json pnpm-workspace.yaml pnpm-lock.yaml turbo.json ./
 COPY apps/server/package.json apps/server/
 COPY packages/streaming/package.json packages/streaming/
 
-# Install dependencies using pnpm (understands workspace protocol)
+# Install dependencies using pnpm (understands workspace:* protocol)
 RUN pnpm install --frozen-lockfile || pnpm install
 
 # Copy source code
@@ -26,7 +28,7 @@ RUN cd apps/server && bun run build
 # ---- Production Stage ----
 FROM oven/bun:1-slim
 
-# Install FFmpeg for video processing
+# Install FFmpeg and curl for video processing and health checks
 RUN apt-get update && \
     apt-get install -y --no-install-recommends ffmpeg ca-certificates curl && \
     rm -rf /var/lib/apt/lists/*
@@ -51,7 +53,6 @@ ENV PORT=3001
 
 EXPOSE 3001
 
-# Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
     CMD curl -f http://localhost:3001/health || exit 1
 
