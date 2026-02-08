@@ -73,6 +73,7 @@ export async function segmentVideo(
           `-vf scale=${preset.width}:${preset.height}`,
           `-c:a aac`,
           `-b:a 128k`,
+          `-force_key_frames expr:gte(t,n_forced*${segmentDuration})`,
           `-f segment`,
           `-segment_format mpegts`,
           `-segment_time ${segmentDuration}`,
@@ -117,9 +118,20 @@ export async function segmentVideo(
       const filePath = join(tempDir, segmentFiles[i]);
       const data = await readFile(filePath);
 
+      // Probe actual duration of each segment (last segment is often shorter)
+      let duration = segmentDuration;
+      try {
+        const meta = await getVideoMetadata(filePath);
+        if (meta.duration > 0) {
+          duration = Math.round(meta.duration * 100) / 100;
+        }
+      } catch {
+        // Fallback to configured segmentDuration
+      }
+
       segments.push({
         index: i,
-        duration: segmentDuration,
+        duration,
         data: Buffer.from(data),
       });
     }

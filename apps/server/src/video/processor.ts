@@ -130,7 +130,9 @@ export async function processVideo(
     "Upload complete"
   );
 
-  const totalDuration = segments.reduce((acc, s) => acc + s.duration, 0);
+  const totalDuration = Math.round(
+    segments.reduce((acc, s) => acc + s.duration, 0)
+  );
 
   return {
     videoId,
